@@ -6,18 +6,18 @@ agent:
 models:
   primary:
     provider: "openrouter"
-    model: "meta-llama/llama-3.3-70b-instruct:free"
+    model: "google/gemini-2.0-flash-exp:free"
     api_key: "${OPENROUTER_API_KEY}"
     max_tokens: 2048
     enable_web_search: false
   utility:
     provider: "openrouter"
-    model: "meta-llama/llama-3.3-70b-instruct:free"
+    model: "google/gemini-2.0-flash-exp:free"
     api_key: "${OPENROUTER_API_KEY}"
     max_tokens: 1024
   fallback:
     provider: "openrouter"
-    model: "meta-llama/llama-3.3-70b-instruct:free"
+    model: "qwen/qwen-2.5-7b-instruct:free"
     api_key: "${OPENROUTER_API_KEY}"
     max_tokens: 1024
 

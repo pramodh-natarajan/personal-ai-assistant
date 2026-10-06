@@ -6,8 +6,8 @@ SIGNAL_DIR="/root/.local/share/signal-cli"
 BACKUP_DIR="/tmp/bodhi-state"
 REPO_URL="https://${GITHUB_TOKEN}@github.com/${GITHUB_USER}/${BACKUP_REPO:-bodhi-state}.git"
 
-export HERMES_MODEL="meta-llama/llama-3.3-70b-instruct:free"
-export MODEL="meta-llama/llama-3.3-70b-instruct:free"
+export HERMES_MODEL="google/gemini-2.0-flash-exp:free"
+export MODEL="google/gemini-2.0-flash-exp:free"
 
 mkdir -p "${HERMES_DIR}" "${SIGNAL_DIR}"
 
@@ -29,58 +29,18 @@ else
     git remote add origin "${REPO_URL}" || true
 fi
 
-# 2. Overwrite Hermes config with repository config.yaml
+# 2. Apply repository config.yaml to Hermes runtime
 echo "[*] Applying repository config.yaml to Hermes runtime..."
 mkdir -p /root/.hermes
 cp /app/config/config.yaml /root/.hermes/config.yaml
 
-# 3. Python state sanitizer (purges paid model references in text & SQLite databases)
-python3 -c "
-import os, sqlite3
+# 3. Purge corrupted SQLite databases so Hermes builds fresh schemas
+echo "[*] Purging malformed SQLite databases..."
+rm -f /root/.hermes/*.db /root/.hermes/*.sqlite /root/.hermes/*.db-journal 2>/dev/null || true
 
-hermes_dir = '/root/.hermes'
-target = 'meta-llama/llama-3.3-70b-instruct:free'
-
-for root, _, files in os.walk(hermes_dir):
-    for f in files:
-        path = os.path.join(root, f)
-        # Clean text & JSON/YAML files
-        try:
-            with open(path, 'r', encoding='utf-8', errors='ignore') as file:
-                content = file.read()
-            if 'glm-5.2' in content or 'z-ai' in content:
-                new_content = content.replace('z-ai/glm-5.2', target).replace('glm-5.2', target)
-                with open(path, 'w', encoding='utf-8') as file:
-                    file.write(new_content)
-                print(f'[+] Purged model override in text file: {path}')
-        except Exception:
-            pass
-            
-        # Clean SQLite database files
-        if f.endswith(('.db', '.sqlite', '.sqlite3')) or 'db' in f:
-            try:
-                conn = sqlite3.connect(path)
-                cursor = conn.cursor()
-                cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table';\")
-                tables = cursor.fetchall()
-                for table in tables:
-                    tname = table[0]
-                    cursor.execute(f'PRAGMA table_info({tname});')
-                    cols = [c[1] for c in cursor.fetchall()]
-                    for col in cols:
-                        try:
-                            cursor.execute(f\"UPDATE {tname} SET {col} = REPLACE({col}, 'z-ai/glm-5.2', '{target}') WHERE {col} LIKE '%glm-5.2%';\")
-                        except Exception:
-                            pass
-                conn.commit()
-                conn.close()
-                print(f'[+] Purged model override in SQLite DB: {path}')
-            except Exception:
-                pass
-"
-
-# Force Hermes CLI model setting if available
-hermes model set meta-llama/llama-3.3-70b-instruct:free 2>/dev/null || hermes config set model meta-llama/llama-3.3-70b-instruct:free 2>/dev/null || true
+# Safe text-based configuration string updates
+find /root/.hermes -type f \( -name "*.yaml" -o -name "*.json" \) -exec sed -i 's|meta-llama/llama-3.3-70b-instruct:free|google/gemini-2.0-flash-exp:free|g' {} + 2>/dev/null || true
+find /root/.hermes -type f \( -name "*.yaml" -o -name "*.json" \) -exec sed -i 's|z-ai/glm-5.2|google/gemini-2.0-flash-exp:free|g' {} + 2>/dev/null || true
 
 # Function to save state and push to GitHub
 sync_to_github() {
