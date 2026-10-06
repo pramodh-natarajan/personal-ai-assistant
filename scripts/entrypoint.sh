@@ -27,6 +27,11 @@ else
     git remote add origin "${REPO_URL}" || true
 fi
 
+# 2. Force apply updated repository config over restored state config
+echo "[*] Applying repository config.yaml to Hermes runtime..."
+mkdir -p /root/.hermes
+cp /app/config/config.yaml /root/.hermes/config.yaml
+
 # Function to save state and push to GitHub
 sync_to_github() {
     echo "[*] Syncing Bodhi state snapshot to GitHub..."
@@ -38,7 +43,7 @@ sync_to_github() {
     echo "[+] State push complete."
 }
 
-# 2. Background periodic sync every 10 minutes
+# 3. Background periodic sync every 10 minutes
 (
     while true; do
         sleep 600
@@ -46,17 +51,17 @@ sync_to_github() {
     done
 ) &
 
-# 3. Trap container shutdown signals to ensure final state is pushed
+# 4. Trap container shutdown signals
 trap 'echo "[*] Container stopping! Saving final Bodhi state..."; sync_to_github; exit 0' SIGTERM SIGINT
 
-# 4. Start signal-cli HTTP daemon in background
+# 5. Start signal-cli HTTP daemon
 if [ -n "$SIGNAL_ACCOUNT" ]; then
     echo "[+] Starting signal-cli daemon for account ${SIGNAL_ACCOUNT}..."
     signal-cli --account "${SIGNAL_ACCOUNT}" daemon --http 127.0.0.1:8080 &
     sleep 3
 fi
 
-# 5. Start background HTTP health check server on $PORT for Render
+# 6. Start background HTTP health check server for Render
 python3 -c "
 import http.server, socketserver, os
 port = int(os.environ.get('PORT', 10000))
@@ -73,6 +78,6 @@ httpd = socketserver.TCPServer(('0.0.0.0', port), HealthHandler)
 httpd.serve_forever()
 " &
 
-# 6. Launch Bodhi Agent Gateway
+# 7. Launch Bodhi Agent Gateway
 echo "[+] Launching Bodhi Personal AI Assistant..."
 exec hermes gateway
