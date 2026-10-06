@@ -1,8 +1,12 @@
+cd personal-ai-assistant
+
+# Create Dockerfile if it is missing
+cat <<'EOF' > Dockerfile
 FROM python:3.11-slim
 
-# Install system dependencies & rclone for GDrive syncing
+# Install system dependencies & git/node
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git build-essential rclone ca-certificates nodejs npm \
+    curl git build-essential ca-certificates nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Hermes Agent Framework
@@ -15,3 +19,4 @@ RUN chmod +x /app/scripts/entrypoint.sh
 
 EXPOSE 10000
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
+EOF
