@@ -6,8 +6,11 @@ SIGNAL_DIR="/root/.local/share/signal-cli"
 BACKUP_DIR="/tmp/bodhi-state"
 REPO_URL="https://${GITHUB_TOKEN}@github.com/${GITHUB_USER}/${BACKUP_REPO:-bodhi-state}.git"
 
-export HERMES_MODEL="google/gemini-2.0-flash-exp:free"
-export MODEL="google/gemini-2.0-flash-exp:free"
+FREE_MODEL="google/gemini-2.0-flash-exp:free"
+
+export HERMES_MODEL="${FREE_MODEL}"
+export MODEL="${FREE_MODEL}"
+export OPENROUTER_MODEL="${FREE_MODEL}"
 
 mkdir -p "${HERMES_DIR}" "${SIGNAL_DIR}"
 
@@ -29,18 +32,23 @@ else
     git remote add origin "${REPO_URL}" || true
 fi
 
-# 2. Apply repository config.yaml to Hermes runtime
-echo "[*] Applying repository config.yaml to Hermes runtime..."
-mkdir -p /root/.hermes
+# 2. Overwrite Hermes config AND personal profile with free model
+echo "[*] Enforcing ${FREE_MODEL} on config.yaml and personal profile..."
+mkdir -p /root/.hermes/profiles
 cp /app/config/config.yaml /root/.hermes/config.yaml
 
-# 3. Purge corrupted SQLite databases so Hermes builds fresh schemas
-echo "[*] Purging malformed SQLite databases..."
-rm -f /root/.hermes/*.db /root/.hermes/*.sqlite /root/.hermes/*.db-journal 2>/dev/null || true
+cat <<EOF > /root/.hermes/profiles/personal.yaml
+name: personal
+model: ${FREE_MODEL}
+provider: openrouter
+api_key: ${OPENROUTER_API_KEY}
+max_tokens: 2048
+EOF
 
-# Safe text-based configuration string updates
-find /root/.hermes -type f \( -name "*.yaml" -o -name "*.json" \) -exec sed -i 's|meta-llama/llama-3.3-70b-instruct:free|google/gemini-2.0-flash-exp:free|g' {} + 2>/dev/null || true
-find /root/.hermes -type f \( -name "*.yaml" -o -name "*.json" \) -exec sed -i 's|z-ai/glm-5.2|google/gemini-2.0-flash-exp:free|g' {} + 2>/dev/null || true
+# 3. Purge malformed SQLite databases and do a global string replacement across all restored files
+rm -f /root/.hermes/*.db /root/.hermes/*.sqlite /root/.hermes/*.db-journal 2>/dev/null || true
+find /root/.hermes -type f -exec sed -i "s|z-ai/glm-5.2|${FREE_MODEL}|g" {} + 2>/dev/null || true
+find /root/.hermes -type f -exec sed -i "s|meta-llama/llama-3.3-70b-instruct:free|${FREE_MODEL}|g" {} + 2>/dev/null || true
 
 # Function to save state and push to GitHub
 sync_to_github() {
