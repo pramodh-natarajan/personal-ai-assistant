@@ -13,7 +13,9 @@ services:
         sync: false
       - key: ALLOWED_WHATSAPP_NUMBER
         sync: false
-      - key: RCLONE_CONFIG_GDRIVE_BACKUP_TOKEN
+      - key: GITHUB_TOKEN
         sync: false
-      - key: GDRIVE_REMOTE_NAME
-        value: "bodhi_backup"
+      - key: GITHUB_USER
+        sync: false
+      - key: BACKUP_REPO
+        value: "bodhi-state"
