@@ -48,6 +48,23 @@ sync_to_github() {
 # 3. Trap container shutdown signals to ensure final state is pushed
 trap 'echo "[*] Container stopping! Saving final Bodhi state..."; sync_to_github; exit 0' SIGTERM SIGINT
 
-# 4. Launch Bodhi Agent Gateway
+# 4. Start background HTTP health check server on $PORT for Render
+python3 -c "
+import http.server, socketserver, os
+port = int(os.environ.get('PORT', 10000))
+class HealthHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Bodhi Gateway Healthy')
+    def log_message(self, format, *args):
+        return
+socketserver.TCPServer.allow_reuse_address = True
+httpd = socketserver.TCPServer(('0.0.0.0', port), HealthHandler)
+httpd.serve_forever()
+" &
+
+# 5. Launch Bodhi Agent Gateway
 echo "[+] Launching Bodhi Personal AI Assistant..."
-exec hermes gateway start --port ${PORT:-10000}
+exec hermes gateway
