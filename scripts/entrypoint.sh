@@ -17,8 +17,9 @@ mkdir -p "${HERMES_DIR}" "${SIGNAL_DIR}"
 git config --global user.name "Bodhi Assistant"
 git config --global user.email "bodhi@render.local"
 
-# 1. Restore state from private GitHub repo
+# 1. Clean staging directory and restore state from private GitHub repo
 echo "[*] Restoring Bodhi memory state and Signal session from GitHub..."
+rm -rf "${BACKUP_DIR}"
 if git clone --depth 1 "${REPO_URL}" "${BACKUP_DIR}" > /dev/null 2>&1; then
     if [ -f "${BACKUP_DIR}/latest.tar.gz" ]; then
         tar -xzf "${BACKUP_DIR}/latest.tar.gz" -C /root/
@@ -32,7 +33,7 @@ else
     git remote add origin "${REPO_URL}" || true
 fi
 
-# 2. Purge stale thread sessions, databases, and profiles carrying old model assignments
+# 2. Purge stale model thread sessions and SQLite caches
 echo "[*] Purging legacy thread sessions and profile caches..."
 rm -rf /root/.hermes/sessions /root/.hermes/threads /root/.hermes/profiles /root/.hermes/cache /root/.hermes/*.db* /root/.hermes/*.sqlite* 2>/dev/null || true
 
@@ -49,7 +50,7 @@ api_key: ${OPENROUTER_API_KEY}
 max_tokens: 2048
 EOF
 
-# Global text replacement for any remaining config references
+# Global text replacement for lingering references
 find /root/.hermes -type f -exec sed -i "s|z-ai/glm-5.2|${FREE_MODEL}|g" {} + 2>/dev/null || true
 find /root/.hermes -type f -exec sed -i "s|meta-llama/llama-3.3-70b-instruct:free|${FREE_MODEL}|g" {} + 2>/dev/null || true
 
@@ -99,6 +100,6 @@ httpd = socketserver.TCPServer(('0.0.0.0', port), HealthHandler)
 httpd.serve_forever()
 " &
 
-# 8. Launch Bodhi Agent Gateway explicitly pointing to the free model
+# 8. Launch Bodhi Agent Gateway cleanly
 echo "[+] Launching Bodhi Personal AI Assistant..."
-exec hermes gateway --model "${FREE_MODEL}"
+exec hermes gateway
