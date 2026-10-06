@@ -8,10 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git build-essential ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install standalone GraalVM native release of signal-cli v0.14.8 (no Java required)
+# Install standalone GraalVM native release of signal-cli v0.14.8
 RUN curl -fL -o /tmp/signal-cli-native.tar.gz "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux-native.tar.gz" \
     && tar xf /tmp/signal-cli-native.tar.gz -C /opt \
-    && ln -sf "/opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli" /usr/local/bin/signal-cli \
+    && ln -sf $(find /opt -name signal-cli -type f | head -n 1) /usr/local/bin/signal-cli \
     && rm /tmp/signal-cli-native.tar.gz
 
 # Install Hermes Agent Framework
