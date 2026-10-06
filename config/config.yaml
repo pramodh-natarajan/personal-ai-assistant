@@ -1,6 +1,7 @@
 agent:
   name: "Bodhi"
   default_profile: "personal"
+  generate_titles: false
 
 models:
   primary:
@@ -8,6 +9,14 @@ models:
     model: "meta-llama/llama-3.3-70b-instruct:free"
     api_key: "${OPENROUTER_API_KEY}"
     enable_web_search: true
+  utility:
+    provider: "openrouter"
+    model: "nvidia/nemotron-3.5-lightning:free"
+    api_key: "${OPENROUTER_API_KEY}"
+  fallback:
+    provider: "openrouter"
+    model: "meta-llama/llama-3.3-70b-instruct:free"
+    api_key: "${OPENROUTER_API_KEY}"
 
 memory:
   memory_enabled: true
