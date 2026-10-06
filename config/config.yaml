@@ -1,0 +1,33 @@
+agent:
+  name: "Bodhi"
+  default_profile: "personal"
+
+models:
+  primary:
+    provider: "openrouter"
+    model: "nousresearch/hermes-3-llama-3.1-405b"
+    api_key: "${OPENROUTER_API_KEY}"
+    enable_web_search: true
+
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  memory_char_limit: 3000
+  user_char_limit: 2000
+  write_approval: false
+
+curator:
+  enabled: true
+  interval_hours: 168
+  consolidate: true
+
+gateway:
+  whatsapp:
+    enabled: true
+    bridge: "baileys"
+    allowed_numbers:
+      - "${ALLOWED_WHATSAPP_NUMBER}"
+    session_store_path: "/root/.hermes/whatsapp_session"
+  cli:
+    enabled: true
+    unified_session: true

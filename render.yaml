@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: personal-ai-assistant
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ALLOWED_WHATSAPP_NUMBER
+        sync: false
+      - key: RCLONE_CONFIG_GDRIVE_BACKUP_TOKEN
+        sync: false
+      - key: GDRIVE_REMOTE_NAME
+        value: "bodhi_backup"
