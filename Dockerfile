@@ -1,4 +1,3 @@
-cat <<'EOF' > Dockerfile
 FROM python:3.11-slim
 
 # Install system dependencies & git/node
@@ -16,4 +15,3 @@ RUN chmod +x /app/scripts/entrypoint.sh
 
 EXPOSE 10000
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-EOF
