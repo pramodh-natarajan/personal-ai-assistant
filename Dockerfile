@@ -1,9 +1,16 @@
 FROM python:3.11-slim
 
-# Install system dependencies & git/node
+# Install system dependencies & OpenJDK JRE for signal-cli
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git build-essential ca-certificates nodejs npm \
+    curl git build-essential ca-certificates openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
+
+# Download and install the latest signal-cli release
+RUN VERSION=$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/AsamK/signal-cli/releases/latest | sed -e 's/^.*\/v//') \
+    && curl -L -O "https://github.com/AsamK/signal-cli/releases/download/v${VERSION}/signal-cli-${VERSION}-Linux.tar.gz" \
+    && tar xf "signal-cli-${VERSION}-Linux.tar.gz" -C /opt \
+    && ln -sf "/opt/signal-cli-${VERSION}/bin/signal-cli" /usr/local/bin/signal-cli \
+    && rm "signal-cli-${VERSION}-Linux.tar.gz"
 
 # Install Hermes Agent Framework
 RUN pip install --no-cache-dir hermes-agent

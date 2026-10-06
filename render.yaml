@@ -11,8 +11,12 @@ services:
         value: 10000
       - key: OPENROUTER_API_KEY
         sync: false
-      - key: ALLOWED_WHATSAPP_NUMBER
+      - key: SIGNAL_ACCOUNT
         sync: false
+      - key: SIGNAL_ALLOWED_USERS
+        sync: false
+      - key: SIGNAL_HTTP_URL
+        value: "http://127.0.0.1:8080"
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_USER

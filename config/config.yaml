@@ -22,12 +22,12 @@ curator:
   consolidate: true
 
 gateway:
-  whatsapp:
+  signal:
     enabled: true
-    bridge: "baileys"
-    allowed_numbers:
-      - "${ALLOWED_WHATSAPP_NUMBER}"
-    session_store_path: "/root/.hermes/whatsapp_session"
+    http_url: "${SIGNAL_HTTP_URL:-http://127.0.0.1:8080}"
+    account: "${SIGNAL_ACCOUNT}"
+    allowed_users:
+      - "${SIGNAL_ALLOWED_USERS}"
   cli:
     enabled: true
     unified_session: true
