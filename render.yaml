@@ -17,6 +17,8 @@ services:
         sync: false
       - key: SIGNAL_HTTP_URL
         value: "http://127.0.0.1:8080"
+      - key: HERMES_MODEL
+        value: "meta-llama/llama-3.3-70b-instruct:free"
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_USER

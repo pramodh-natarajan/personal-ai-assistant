@@ -6,6 +6,9 @@ SIGNAL_DIR="/root/.local/share/signal-cli"
 BACKUP_DIR="/tmp/bodhi-state"
 REPO_URL="https://${GITHUB_TOKEN}@github.com/${GITHUB_USER}/${BACKUP_REPO:-bodhi-state}.git"
 
+# Force model override at process level
+export HERMES_MODEL="meta-llama/llama-3.3-70b-instruct:free"
+
 mkdir -p "${HERMES_DIR}" "${SIGNAL_DIR}"
 
 # Configure git credentials
@@ -27,10 +30,13 @@ else
     git remote add origin "${REPO_URL}" || true
 fi
 
-# 2. Force apply updated repository config over restored state config
-echo "[*] Applying repository config.yaml to Hermes runtime..."
+# 2. Enforce free model across runtime config and restored profiles
+echo "[*] Enforcing free model on Hermes runtime..."
 mkdir -p /root/.hermes
 cp /app/config/config.yaml /root/.hermes/config.yaml
+
+# Replace lingering cached references to z-ai/glm-5.2 or paid models in restored files
+find /root/.hermes -type f \( -name "*.yaml" -o -name "*.json" \) -exec sed -i 's|z-ai/glm-5.2|meta-llama/llama-3.3-70b-instruct:free|g' {} + 2>/dev/null || true
 
 # Function to save state and push to GitHub
 sync_to_github() {
