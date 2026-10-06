@@ -1,6 +1,3 @@
-cd personal-ai-assistant
-
-# Create Dockerfile if it is missing
 cat <<'EOF' > Dockerfile
 FROM python:3.11-slim
 
