@@ -32,7 +32,11 @@ else
     git remote add origin "${REPO_URL}" || true
 fi
 
-# 2. Overwrite Hermes config AND personal profile with free model
+# 2. Purge stale thread sessions, databases, and profiles carrying old model assignments
+echo "[*] Purging legacy thread sessions and profile caches..."
+rm -rf /root/.hermes/sessions /root/.hermes/threads /root/.hermes/profiles /root/.hermes/cache /root/.hermes/*.db* /root/.hermes/*.sqlite* 2>/dev/null || true
+
+# 3. Re-initialize clean config and personal profile
 echo "[*] Enforcing ${FREE_MODEL} on config.yaml and personal profile..."
 mkdir -p /root/.hermes/profiles
 cp /app/config/config.yaml /root/.hermes/config.yaml
@@ -45,8 +49,7 @@ api_key: ${OPENROUTER_API_KEY}
 max_tokens: 2048
 EOF
 
-# 3. Purge malformed SQLite databases and do a global string replacement across all restored files
-rm -f /root/.hermes/*.db /root/.hermes/*.sqlite /root/.hermes/*.db-journal 2>/dev/null || true
+# Global text replacement for any remaining config references
 find /root/.hermes -type f -exec sed -i "s|z-ai/glm-5.2|${FREE_MODEL}|g" {} + 2>/dev/null || true
 find /root/.hermes -type f -exec sed -i "s|meta-llama/llama-3.3-70b-instruct:free|${FREE_MODEL}|g" {} + 2>/dev/null || true
 
@@ -96,6 +99,6 @@ httpd = socketserver.TCPServer(('0.0.0.0', port), HealthHandler)
 httpd.serve_forever()
 " &
 
-# 8. Launch Bodhi Agent Gateway
+# 8. Launch Bodhi Agent Gateway explicitly pointing to the free model
 echo "[+] Launching Bodhi Personal AI Assistant..."
-exec hermes gateway
+exec hermes gateway --model "${FREE_MODEL}"
