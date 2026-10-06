@@ -8,27 +8,28 @@ models:
     provider: "openrouter"
     model: "meta-llama/llama-3.3-70b-instruct:free"
     api_key: "${OPENROUTER_API_KEY}"
-    enable_web_search: true
+    max_tokens: 2048
+    enable_web_search: false
   utility:
     provider: "openrouter"
-    model: "nvidia/nemotron-3.5-lightning:free"
+    model: "meta-llama/llama-3.3-70b-instruct:free"
     api_key: "${OPENROUTER_API_KEY}"
+    max_tokens: 1024
   fallback:
     provider: "openrouter"
     model: "meta-llama/llama-3.3-70b-instruct:free"
     api_key: "${OPENROUTER_API_KEY}"
+    max_tokens: 1024
 
 memory:
   memory_enabled: true
   user_profile_enabled: true
-  memory_char_limit: 3000
-  user_char_limit: 2000
+  memory_char_limit: 2000
+  user_char_limit: 1500
   write_approval: false
 
 curator:
-  enabled: true
-  interval_hours: 168
-  consolidate: true
+  enabled: false
 
 gateway:
   signal:
