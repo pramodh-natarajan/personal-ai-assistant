@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git build-essential ca-certificates default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install a pinned stable release of signal-cli
-RUN curl -fL -o /tmp/signal-cli.tar.gz "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux.tar.gz" \
+# Download and install signal-cli
+RUN curl -fL -o /tmp/signal-cli.tar.gz "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}.tar.gz" \
     && tar xf /tmp/signal-cli.tar.gz -C /opt \
     && ln -sf "/opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli" /usr/local/bin/signal-cli \
     && rm /tmp/signal-cli.tar.gz
