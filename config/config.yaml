@@ -3,6 +3,7 @@ agent:
   default_profile: "personal"
   generate_titles: false
 
+# Hermes primary model block
 model:
   provider: "custom"
   default: "gemini-1.5-flash"
@@ -10,8 +11,9 @@ model:
   api_key: "${GEMINI_API_KEY}"
   max_tokens: 2048
 
+# Provider name must match provider: "custom" to preserve trailing slash in base_url
 custom_providers:
-  - name: gemini
+  - name: custom
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
     model: "gemini-1.5-flash"
@@ -38,6 +40,21 @@ fallback_providers:
     model: "gemini-1.5-flash"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
+
+# Disables unused tool schemas
+tools:
+  disabled:
+    - "browser"
+    - "browser_cdp"
+    - "browser_dialog"
+    - "browser_vision"
+    - "close_terminal"
+    - "computer_use"
+    - "image_generation"
+    - "kanban"
+    - "kanban_orchestrator"
+    - "read_terminal"
+    - "vision"
 
 memory:
   memory_enabled: true
