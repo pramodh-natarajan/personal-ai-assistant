@@ -10,7 +10,7 @@ import subprocess
 import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-# Unbuffer stdout and stderr for immediate logging in Render
+# Line-buffered output for instant Render logging
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -118,18 +118,25 @@ def purge_stale_sessions():
 def wait_for_signal_daemon():
     if not SIGNAL_ACCOUNT:
         return
+
+    # Kill any orphaned signal-cli daemon processes before starting
+    run_cmd("pkill -9 -f signal-cli || true")
+    time.sleep(1)
+
     print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...", flush=True)
     subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
     
-    print("[*] Polling 127.0.0.1:8080 TCP socket until ready...", flush=True)
-    for _ in range(30):
+    print("[*] Polling 127.0.0.1:8080 TCP socket until ready (up to 90s)...", flush=True)
+    for elapsed in range(1, 91):
         try:
             with socket.create_connection(("127.0.0.1", 8080), timeout=1):
-                print("[+] signal-cli daemon TCP socket connected on port 8080!", flush=True)
+                print(f"[+] signal-cli daemon TCP socket connected on port 8080 after {elapsed}s!", flush=True)
                 return
         except Exception:
-            time.sleep(0.5)
-    print("[!] Warning: signal-cli daemon socket check timed out.", flush=True)
+            if elapsed % 5 == 0:
+                print(f"[*] Still waiting for signal-cli port 8080 ({elapsed}s elapsed)...", flush=True)
+            time.sleep(1)
+    print("[!] Warning: signal-cli daemon socket check timed out after 90 seconds.", flush=True)
 
 def sync_to_github():
     if not GITHUB_TOKEN or not GITHUB_USER:
@@ -173,7 +180,7 @@ def main():
 
     threading.Thread(target=periodic_sync_loop, daemon=True).start()
 
-    # 2. Wait for signal-cli port 8080 TCP socket
+    # 2. Kill legacy processes and wait for signal-cli socket connection
     wait_for_signal_daemon()
 
     # 3. Launch Hermes Gateway
