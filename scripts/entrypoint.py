@@ -10,7 +10,7 @@ import subprocess
 import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-# Line-buffered output for instant Render logging
+# Unbuffer stdout/stderr for real-time Render log output
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -33,10 +33,7 @@ os.environ["HERMES_MODEL"] = TARGET_MODEL
 os.environ["OPENAI_BASE_URL"] = TARGET_BASE_URL
 os.environ["OPENAI_API_KEY"] = GROQ_KEY
 
-def run_cmd(cmd, check=False):
-    return subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)
-
-def start_health_server():
+def bind_health_server_instantly():
     port = int(os.environ.get("PORT", 10000))
     class HealthHandler(SimpleHTTPRequestHandler):
         def do_GET(self):
@@ -47,8 +44,12 @@ def start_health_server():
         def log_message(self, format, *args):
             return
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    print(f"[+] Render health check server bound to 0.0.0.0:{port}", flush=True)
-    server.serve_forever()
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    print(f"[+] Render health check server bound to 0.0.0.0:{port} instantly.", flush=True)
+
+def run_cmd(cmd, check=False):
+    return subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)
 
 def restore_state():
     print("[*] Restoring Bodhi memory state and Signal session from GitHub...", flush=True)
@@ -71,6 +72,15 @@ def restore_state():
             print(f"[!] Tarball restore note: {e}", flush=True)
     else:
         print("[!] No backup repository found. Initializing clean slate.", flush=True)
+
+def fix_signal_ratchet_desync():
+    """Clear stale recipient session ratchets to force fresh key exchange and solve InvalidMessageException"""
+    if not SIGNAL_ACCOUNT:
+        return
+    print("[*] Purging stale Signal session ratchets to resolve decryption errors...", flush=True)
+    sessions_dir = os.path.join(SIGNAL_DIR, "data", "sessions")
+    if os.path.exists(sessions_dir):
+        shutil.rmtree(sessions_dir, ignore_errors=True)
 
 def configure_hermes():
     print("[*] Writing Hermes configuration and profile files...", flush=True)
@@ -119,7 +129,7 @@ def wait_for_signal_daemon():
     if not SIGNAL_ACCOUNT:
         return
 
-    # Kill any orphaned signal-cli daemon processes before starting
+    # Terminate any stale signal-cli background processes
     run_cmd("pkill -9 -f signal-cli || true")
     time.sleep(1)
 
@@ -134,7 +144,7 @@ def wait_for_signal_daemon():
                 return
         except Exception:
             if elapsed % 5 == 0:
-                print(f"[*] Still waiting for signal-cli port 8080 ({elapsed}s elapsed)...", flush=True)
+                print(f"[*] Waiting for signal-cli port 8080 ({elapsed}s elapsed)...", flush=True)
             time.sleep(1)
     print("[!] Warning: signal-cli daemon socket check timed out after 90 seconds.", flush=True)
 
@@ -167,20 +177,20 @@ def periodic_sync_loop():
         sync_to_github()
 
 def main():
-    # 1. Bind health check server immediately
-    threading.Thread(target=start_health_server, daemon=True).start()
-    time.sleep(0.5)
+    # 1. Bind health check server immediately at process startup
+    bind_health_server_instantly()
 
     run_cmd('git config --global user.name "Bodhi Assistant"')
     run_cmd('git config --global user.email "bodhi@render.local"')
 
     restore_state()
+    fix_signal_ratchet_desync()
     configure_hermes()
     purge_stale_sessions()
 
     threading.Thread(target=periodic_sync_loop, daemon=True).start()
 
-    # 2. Kill legacy processes and wait for signal-cli socket connection
+    # 2. Start signal-cli and block gateway launch until socket opens
     wait_for_signal_daemon()
 
     # 3. Launch Hermes Gateway
