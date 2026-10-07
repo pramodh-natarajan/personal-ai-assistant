@@ -2,11 +2,12 @@
 import os
 import sys
 import time
-import json
-import sqlite3
+import shutil
+import glob
 import tarfile
 import subprocess
 import threading
+import urllib.request
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 HERMES_DIR = "/root/.hermes"
@@ -22,7 +23,6 @@ GITHUB_USER = os.environ.get("GITHUB_USER", "")
 BACKUP_REPO = os.environ.get("BACKUP_REPO", "bodhi-state")
 SIGNAL_ACCOUNT = os.environ.get("SIGNAL_ACCOUNT", "")
 
-# Remove OpenRouter key to prevent legacy auto-discovery
 os.environ.pop("OPENROUTER_API_KEY", None)
 os.environ["HERMES_PROVIDER"] = "custom"
 os.environ["HERMES_MODEL"] = TARGET_MODEL
@@ -80,49 +80,39 @@ max_tokens: 2048
     with open(os.path.join(HERMES_DIR, "profiles", "personal.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)
 
-def sanitize_state_files():
-    print("[*] Sanitizing session threads and SQLite state...")
-    for root, _, files in os.walk(HERMES_DIR):
-        for f in files:
-            if f.endswith(".json"):
-                path = os.path.join(root, f)
-                try:
-                    with open(path, "r", encoding="utf-8") as jf:
-                        data = json.load(jf)
-                    if isinstance(data, dict):
-                        updated = False
-                        if data.get("model") != TARGET_MODEL:
-                            data["model"] = TARGET_MODEL
-                            updated = True
-                        if data.get("provider") != "custom":
-                            data["provider"] = "custom"
-                            updated = True
-                        if updated:
-                            with open(path, "w", encoding="utf-8") as jf:
-                                json.dump(data, jf, indent=2)
-                except Exception:
-                    pass
+def purge_stale_sessions():
+    print("[*] Purging stale sessions and caches to prevent schema conflicts...")
+    stale_paths = [
+        os.path.join(HERMES_DIR, "sessions"),
+        os.path.join(HERMES_DIR, "threads"),
+        os.path.join(HERMES_DIR, "cache"),
+    ]
+    for p in stale_paths:
+        if os.path.exists(p):
+            shutil.rmtree(p, ignore_errors=True)
+    
+    for db_file in glob.glob(os.path.join(HERMES_DIR, "*.db*")):
+        try:
+            os.remove(db_file)
+        except Exception:
+            pass
 
-    for root, _, files in os.walk(HERMES_DIR):
-        for f in files:
-            if f.endswith((".db", ".sqlite", ".sqlite3")):
-                path = os.path.join(root, f)
-                try:
-                    conn = sqlite3.connect(path)
-                    cur = conn.cursor()
-                    cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
-                    tables = [t[0] for t in cur.fetchall()]
-                    for table in tables:
-                        cur.execute(f"PRAGMA table_info({table});")
-                        cols = [c[1] for c in cur.fetchall()]
-                        if "model" in cols:
-                            cur.execute(f"UPDATE {table} SET model = ?;", (TARGET_MODEL,))
-                        if "provider" in cols:
-                            cur.execute(f"UPDATE {table} SET provider = ?;", ("custom",))
-                    conn.commit()
-                    conn.close()
-                except Exception:
-                    pass
+def wait_for_signal_daemon():
+    if not SIGNAL_ACCOUNT:
+        return
+    print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...")
+    subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
+    
+    print("[*] Waiting for signal-cli daemon to become healthy on http://127.0.0.1:8080...")
+    for _ in range(15):
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8080/v1/about", timeout=2) as response:
+                if response.status == 200:
+                    print("[+] signal-cli daemon connected successfully!")
+                    return
+        except Exception:
+            time.sleep(1)
+    print("[!] Warning: signal-cli daemon did not respond within 15 seconds. Proceeding...")
 
 def sync_to_github():
     if not GITHUB_TOKEN or not GITHUB_USER:
@@ -171,15 +161,12 @@ def main():
 
     restore_state()
     configure_hermes()
-    sanitize_state_files()
+    purge_stale_sessions()
 
     threading.Thread(target=periodic_sync_loop, daemon=True).start()
     threading.Thread(target=start_health_server, daemon=True).start()
 
-    if SIGNAL_ACCOUNT:
-        print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...")
-        subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
-        time.sleep(4)
+    wait_for_signal_daemon()
 
     print("[+] Launching Hermes Agent Gateway...")
     os.execvp("hermes", ["hermes", "gateway"])

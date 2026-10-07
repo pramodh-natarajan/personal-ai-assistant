@@ -18,8 +18,8 @@ RUN curl -fsSL -o /tmp/openjdk.tar.gz https://github.com/adoptium/temurin21-bina
 ENV JAVA_HOME=/usr/lib/jvm/openjdk-21
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
-# Install signal-cli v0.13.12
-ENV SIGNAL_CLI_VERSION=0.13.12
+# Install signal-cli v0.14.8 (matches restored config format version 11)
+ENV SIGNAL_CLI_VERSION=0.14.8
 RUN curl -fsSL -o /tmp/signal-cli.tar.gz https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}.tar.gz \
     && tar -xzf /tmp/signal-cli.tar.gz -C /opt/ \
     && ln -s /opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli /usr/local/bin/signal-cli \
