@@ -3,11 +3,11 @@ import os
 import sys
 import time
 import shutil
-import socket
 import glob
 import tarfile
 import subprocess
 import threading
+import urllib.request
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 HERMES_DIR = "/root/.hermes"
@@ -32,8 +32,22 @@ os.environ["OPENAI_API_KEY"] = GROQ_KEY
 def run_cmd(cmd, check=False):
     return subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)
 
+def start_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    class HealthHandler(SimpleHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Bodhi Gateway Healthy")
+        def log_message(self, format, *args):
+            return
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    print(f"[+] Render health check server bound to 0.0.0.0:{port}", flush=True)
+    server.serve_forever()
+
 def restore_state():
-    print("[*] Restoring Bodhi memory state and Signal session from GitHub...")
+    print("[*] Restoring Bodhi memory state and Signal session from GitHub...", flush=True)
     os.makedirs(HERMES_DIR, exist_ok=True)
     os.makedirs(SIGNAL_DIR, exist_ok=True)
     
@@ -48,14 +62,14 @@ def restore_state():
         try:
             with tarfile.open(archive, "r:gz") as tar:
                 tar.extractall(path="/root")
-            print("[+] Memory and Signal session successfully restored.")
+            print("[+] Memory and Signal session successfully restored.", flush=True)
         except Exception as e:
-            print(f"[!] Tarball restore note: {e}")
+            print(f"[!] Tarball restore note: {e}", flush=True)
     else:
-        print("[!] No backup repository found. Initializing clean slate.")
+        print("[!] No backup repository found. Initializing clean slate.", flush=True)
 
 def configure_hermes():
-    print("[*] Writing Hermes configuration and profile files...")
+    print("[*] Writing Hermes configuration and profile files...", flush=True)
     os.makedirs(os.path.join(HERMES_DIR, "profiles"), exist_ok=True)
     
     if os.path.exists("/app/config/config.yaml"):
@@ -81,7 +95,7 @@ max_tokens: 2048
         f.write(profile_content)
 
 def purge_stale_sessions():
-    print("[*] Purging stale thread sessions and SQLite caches...")
+    print("[*] Purging stale thread sessions and SQLite caches...", flush=True)
     stale_paths = [
         os.path.join(HERMES_DIR, "sessions"),
         os.path.join(HERMES_DIR, "threads"),
@@ -100,23 +114,25 @@ def purge_stale_sessions():
 def wait_for_signal_daemon():
     if not SIGNAL_ACCOUNT:
         return
-    print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...")
+    print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...", flush=True)
     subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
     
-    print("[*] Polling 127.0.0.1:8080 until signal-cli socket opens...")
-    for _ in range(20):
+    print("[*] Polling http://127.0.0.1:8080/v1/about until signal-cli is fully ready...", flush=True)
+    for _ in range(45):
         try:
-            with socket.create_connection(("127.0.0.1", 8080), timeout=2):
-                print("[+] signal-cli daemon port 8080 connected!")
-                return
+            req = urllib.request.Request("http://127.0.0.1:8080/v1/about")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                if resp.status == 200:
+                    print("[+] signal-cli daemon HTTP API is ready (200 OK)!", flush=True)
+                    return
         except Exception:
             time.sleep(1)
-    print("[!] Warning: signal-cli daemon socket did not respond within 20 seconds.")
+    print("[!] Warning: signal-cli daemon HTTP check timed out. Proceeding...", flush=True)
 
 def sync_to_github():
     if not GITHUB_TOKEN or not GITHUB_USER:
         return
-    print("[*] Syncing Bodhi state snapshot to GitHub...")
+    print("[*] Syncing Bodhi state snapshot to GitHub...", flush=True)
     repo_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_USER}/{BACKUP_REPO}.git"
     archive = os.path.join(BACKUP_DIR, "latest.tar.gz")
     os.makedirs(BACKUP_DIR, exist_ok=True)
@@ -132,29 +148,20 @@ def sync_to_github():
         run_cmd(f"cd {BACKUP_DIR} && git add latest.tar.gz")
         run_cmd(f'cd {BACKUP_DIR} && git commit -m "Auto-sync Bodhi state [{time.strftime("%Y-%m-%dT%H:%M:%SZ")}]"')
         run_cmd(f"cd {BACKUP_DIR} && git push -u origin main --force")
-        print("[+] State push complete.")
+        print("[+] State push complete.", flush=True)
     except Exception as e:
-        print(f"[!] State sync error: {e}")
+        print(f"[!] State sync error: {e}", flush=True)
 
 def periodic_sync_loop():
     while True:
         time.sleep(600)
         sync_to_github()
 
-def start_health_server():
-    port = int(os.environ.get("PORT", 10000))
-    class HealthHandler(SimpleHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"Bodhi Gateway Healthy")
-        def log_message(self, format, *args):
-            return
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    server.serve_forever()
-
 def main():
+    # 1. Start Render health check server FIRST so port 10000 opens instantly
+    threading.Thread(target=start_health_server, daemon=True).start()
+    time.sleep(1)
+
     run_cmd('git config --global user.name "Bodhi Assistant"')
     run_cmd('git config --global user.email "bodhi@render.local"')
 
@@ -163,11 +170,12 @@ def main():
     purge_stale_sessions()
 
     threading.Thread(target=periodic_sync_loop, daemon=True).start()
-    threading.Thread(target=start_health_server, daemon=True).start()
 
+    # 2. Start signal-cli and block execution until 127.0.0.1:8080 returns 200 OK
     wait_for_signal_daemon()
 
-    print("[+] Launching Hermes Agent Gateway...")
+    # 3. Launch Hermes Gateway only after signal-cli is active
+    print("[+] Launching Hermes Agent Gateway...", flush=True)
     os.execvp("hermes", ["hermes", "gateway"])
 
 if __name__ == "__main__":
