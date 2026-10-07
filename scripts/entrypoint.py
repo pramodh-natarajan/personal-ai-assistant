@@ -19,8 +19,8 @@ HERMES_DIR = "/root/.hermes"
 SIGNAL_DIR = "/root/.local/share/signal-cli"
 BACKUP_DIR = "/tmp/bodhi-state"
 
-TARGET_MODEL = "openai/gpt-oss-120b"
-AUXILIARY_MODEL = "openai/gpt-oss-20b"
+TARGET_MODEL = "llama3-70b-8192"
+AUXILIARY_MODEL = "llama3-8b-8192"
 TARGET_PROVIDER = "custom"
 TARGET_BASE_URL = "https://api.groq.com/openai/v1"
 
@@ -162,7 +162,7 @@ provider: {TARGET_PROVIDER}
 model: {TARGET_MODEL}
 base_url: {TARGET_BASE_URL}
 api_key: {GROQ_KEY}
-max_tokens: 2048
+max_tokens: 1024
 """
     with open(os.path.join(HERMES_DIR, "profiles", "personal.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)

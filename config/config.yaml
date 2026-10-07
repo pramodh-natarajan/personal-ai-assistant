@@ -3,49 +3,63 @@ agent:
   default_profile: "personal"
   generate_titles: false
 
-# Hermes requires this singular `model` block (not `models:`).
+# Active Groq model configuration using supported endpoints
 model:
   provider: "custom"
-  default: "openai/gpt-oss-120b"
+  default: "llama3-70b-8192"
   base_url: "https://api.groq.com/openai/v1"
   api_key: "${GROQ_API_KEY}"
-  max_tokens: 2048
+  max_tokens: 1024
 
-# Must be a YAML list (each item prefixed with '-'), not a mapping.
 custom_providers:
   - name: groq
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
-    model: "openai/gpt-oss-120b"
+    model: "llama3-70b-8192"
 
 auxiliary:
   compression:
     provider: "custom"
-    model: "openai/gpt-oss-20b"
+    model: "llama3-8b-8192"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
   title_generation:
     provider: "custom"
-    model: "openai/gpt-oss-20b"
+    model: "llama3-8b-8192"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
   curator:
     provider: "custom"
-    model: "openai/gpt-oss-20b"
+    model: "llama3-8b-8192"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
 
 fallback_providers:
   - provider: "custom"
-    model: "openai/gpt-oss-20b"
+    model: "llama3-8b-8192"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
+
+# Disables unused tool schemas that inflate system prompt token count
+tools:
+  disabled:
+    - "browser"
+    - "browser_cdp"
+    - "browser_dialog"
+    - "browser_vision"
+    - "close_terminal"
+    - "computer_use"
+    - "image_generation"
+    - "kanban"
+    - "kanban_orchestrator"
+    - "read_terminal"
+    - "vision"
 
 memory:
   memory_enabled: true
   user_profile_enabled: true
-  memory_char_limit: 3000
-  user_char_limit: 2000
+  memory_char_limit: 2000
+  user_char_limit: 1500
   write_approval: false
 
 curator:
