@@ -107,7 +107,6 @@ def configure_hermes():
     print("[*] Writing Hermes configuration, profiles, and model.json...", flush=True)
     os.makedirs(os.path.join(HERMES_DIR, "profiles"), exist_ok=True)
     
-    # 1. Sync SOUL.md & USER.md
     soul_target = os.path.join(HERMES_DIR, "SOUL.md")
     soul_source = "/app/config/SOUL.md"
     if os.path.exists(soul_source):
@@ -120,7 +119,6 @@ def configure_hermes():
         shutil.copy(user_source, user_target)
         print("[+] Seeded /root/.hermes/USER.md from tracked config/USER.md.", flush=True)
 
-    # 2. Expand env vars in config.yaml directly
     config_source = "/app/config/config.yaml"
     config_target = os.path.join(HERMES_DIR, "config.yaml")
     if os.path.exists(config_source):
@@ -133,7 +131,6 @@ def configure_hermes():
             f.write(cfg_str)
         print("[+] Expanded environment variables in /root/.hermes/config.yaml.", flush=True)
 
-    # 3. Write /root/.hermes/model.json
     model_json_path = os.path.join(HERMES_DIR, "model.json")
     model_data = {
         "provider": TARGET_PROVIDER,
@@ -148,7 +145,6 @@ def configure_hermes():
     with open(model_json_path, "w", encoding="utf-8") as f:
         json.dump(model_data, f, indent=2)
 
-    # 4. Write runtime .env file
     env_content = (
         f"HERMES_PROVIDER={TARGET_PROVIDER}\n"
         f"HERMES_MODEL={TARGET_MODEL}\n"
@@ -161,7 +157,6 @@ def configure_hermes():
     with open(os.path.join(HERMES_DIR, ".env"), "w", encoding="utf-8") as f:
         f.write(env_content)
         
-    # 5. Write profiles
     profile_content = f"""name: personal
 provider: {TARGET_PROVIDER}
 model: {TARGET_MODEL}

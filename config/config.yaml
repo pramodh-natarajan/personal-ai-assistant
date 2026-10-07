@@ -1,12 +1,12 @@
-provider: "custom"
-model: "llama-3.3-70b-versatile"
-base_url: "https://api.groq.com/openai/v1"
-api_key: "${GROQ_API_KEY}"
-
 agent:
   name: "Bodhi"
   default_profile: "personal"
   generate_titles: false
+
+custom_providers:
+  custom:
+    base_url: "https://api.groq.com/openai/v1"
+    api_key: "${GROQ_API_KEY}"
 
 models:
   primary:
