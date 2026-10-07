@@ -4,7 +4,7 @@ services:
     env: docker
     plan: free
     region: oregon
-    healthCheckPath: /health
+    healthCheckPath: /
     autoDeploy: true
     envVars:
       - key: PORT
@@ -17,10 +17,6 @@ services:
         sync: false
       - key: SIGNAL_HTTP_URL
         value: "http://127.0.0.1:8080"
-      - key: HERMES_MODEL
-        value: "llama-3.3-70b-versatile"
-      - key: HERMES_PROVIDER
-        value: "groq"
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_USER

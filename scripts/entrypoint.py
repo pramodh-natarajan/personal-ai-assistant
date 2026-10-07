@@ -22,8 +22,12 @@ GITHUB_USER = os.environ.get("GITHUB_USER", "")
 BACKUP_REPO = os.environ.get("BACKUP_REPO", "bodhi-state")
 SIGNAL_ACCOUNT = os.environ.get("SIGNAL_ACCOUNT", "")
 
-# Disable OpenRouter auto-discovery overrides
+# Remove OpenRouter key to prevent legacy auto-discovery
 os.environ.pop("OPENROUTER_API_KEY", None)
+os.environ["HERMES_PROVIDER"] = "custom"
+os.environ["HERMES_MODEL"] = TARGET_MODEL
+os.environ["OPENAI_BASE_URL"] = TARGET_BASE_URL
+os.environ["OPENAI_API_KEY"] = GROQ_KEY
 
 def run_cmd(cmd, check=False):
     return subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)
