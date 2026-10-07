@@ -22,7 +22,7 @@ BACKUP_DIR = "/tmp/bodhi-state"
 TARGET_MODEL = "gemini-1.5-flash"
 AUXILIARY_MODEL = "gemini-1.5-flash"
 TARGET_PROVIDER = "custom"
-TARGET_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+TARGET_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/v1"
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
