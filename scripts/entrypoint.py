@@ -10,7 +10,6 @@ import subprocess
 import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-# Unbuffer stdout/stderr for real-time Render log output
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -46,7 +45,7 @@ def bind_health_server_instantly():
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
-    print(f"[+] Render health check server bound to 0.0.0.0:{port} instantly.", flush=True)
+    print(f"[+] Render health check HTTP server listening on 0.0.0.0:{port}", flush=True)
 
 def run_cmd(cmd, check=False):
     return subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)
@@ -73,14 +72,14 @@ def restore_state():
     else:
         print("[!] No backup repository found. Initializing clean slate.", flush=True)
 
-def fix_signal_ratchet_desync():
-    """Clear stale recipient session ratchets to force fresh key exchange and solve InvalidMessageException"""
-    if not SIGNAL_ACCOUNT:
-        return
-    print("[*] Purging stale Signal session ratchets to resolve decryption errors...", flush=True)
-    sessions_dir = os.path.join(SIGNAL_DIR, "data", "sessions")
-    if os.path.exists(sessions_dir):
-        shutil.rmtree(sessions_dir, ignore_errors=True)
+def reset_signal_ratchet_session():
+    """Triggers an explicit session reset to re-key Double Ratchet encryption with authorized users."""
+    allowed_users = os.environ.get("SIGNAL_ALLOWED_USERS", "").split(",")
+    for user in allowed_users:
+        user = user.strip()
+        if user:
+            print(f"[*] Sending ratchet reset signal to {user} to establish fresh session...", flush=True)
+            run_cmd(f'signal-cli -u "{SIGNAL_ACCOUNT}" send -m "[Bodhi] Encryption session re-established." --end-session "{user}"')
 
 def configure_hermes():
     print("[*] Writing Hermes configuration and profile files...", flush=True)
@@ -129,7 +128,6 @@ def wait_for_signal_daemon():
     if not SIGNAL_ACCOUNT:
         return
 
-    # Terminate any stale signal-cli background processes
     run_cmd("pkill -9 -f signal-cli || true")
     time.sleep(1)
 
@@ -173,27 +171,26 @@ def sync_to_github():
 
 def periodic_sync_loop():
     while True:
-        time.sleep(600)
+        time.sleep(180)
         sync_to_github()
 
 def main():
-    # 1. Bind health check server immediately at process startup
     bind_health_server_instantly()
 
     run_cmd('git config --global user.name "Bodhi Assistant"')
     run_cmd('git config --global user.email "bodhi@render.local"')
 
     restore_state()
-    fix_signal_ratchet_desync()
     configure_hermes()
     purge_stale_sessions()
 
+    # Issue session reset command prior to daemon boot
+    reset_signal_ratchet_session()
+
     threading.Thread(target=periodic_sync_loop, daemon=True).start()
 
-    # 2. Start signal-cli and block gateway launch until socket opens
     wait_for_signal_daemon()
 
-    # 3. Launch Hermes Gateway
     print("[+] Launching Hermes Agent Gateway...", flush=True)
     os.execvp("hermes", ["hermes", "gateway"])
 
