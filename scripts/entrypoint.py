@@ -225,7 +225,7 @@ def sync_to_github():
 
 def periodic_sync_loop():
     while True:
-        time.sleep(14400)
+        time.sleep(600)
         sync_to_github()
 
 def run_hermes_supervisor():
