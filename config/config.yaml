@@ -6,7 +6,7 @@ agent:
 # Hermes requires this singular `model` block (not `models:`).
 model:
   provider: "custom"
-  default: "llama-3.3-70b-versatile"
+  default: "openai/gpt-oss-120b"
   base_url: "https://api.groq.com/openai/v1"
   api_key: "${GROQ_API_KEY}"
   max_tokens: 2048
@@ -16,28 +16,28 @@ custom_providers:
   - name: groq
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
-    model: "llama-3.3-70b-versatile"
+    model: "openai/gpt-oss-120b"
 
 auxiliary:
   compression:
     provider: "custom"
-    model: "llama-3.1-8b-instant"
+    model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
   title_generation:
     provider: "custom"
-    model: "llama-3.1-8b-instant"
+    model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
   curator:
     provider: "custom"
-    model: "llama-3.1-8b-instant"
+    model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
 
 fallback_providers:
   - provider: "custom"
-    model: "llama-3.1-8b-instant"
+    model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
 

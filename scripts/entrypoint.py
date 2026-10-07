@@ -19,8 +19,8 @@ HERMES_DIR = "/root/.hermes"
 SIGNAL_DIR = "/root/.local/share/signal-cli"
 BACKUP_DIR = "/tmp/bodhi-state"
 
-TARGET_MODEL = "llama-3.3-70b-versatile"
-AUXILIARY_MODEL = "llama-3.1-8b-instant"
+TARGET_MODEL = "openai/gpt-oss-120b"
+AUXILIARY_MODEL = "openai/gpt-oss-20b"
 TARGET_PROVIDER = "custom"
 TARGET_BASE_URL = "https://api.groq.com/openai/v1"
 

@@ -1,230 +1,169 @@
-# **Bodhi — Persistent Hermes AI Agent on Render with Signal Gateway**
+# Bodhi
 
-Bodhi is a persistent, autonomous AI agent built on the **Hermes Agent** framework, deployed on **Render** using **Signal** as the messaging interface and **Groq** (llama-3.3-70b-versatile & llama-3.1-8b-instant) as the primary inference engine.
+Persistent Hermes Agent on Render, with Signal as the chat interface and Groq (`openai/gpt-oss-120b` / `openai/gpt-oss-20b`) as the inference backend.
 
-This repository features automatic state restoration and remote persistence via a private GitHub state repository (bodhi-state), an embedded Python supervisor for process management and Render health checks, and signal-cli v0.14.8 running under Java 25\.
+Bodhi restores memory and Signal session state from a private GitHub backup on boot, runs `signal-cli` as an HTTP daemon, and supervises `hermes gateway`. Snapshots are pushed back to GitHub every three minutes.
 
-## **System Architecture**
+## Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐  
-│ Render Free Container (Debian Bookworm \+ Docker)                        │  
-│                                                                        │  
-│  ┌────────────────────────┐         ┌───────────────────────────────┐  │  
-│  │ Python Supervisor      │         │ signal-cli v0.14.8 Daemon     │  │  
-│  │ (entrypoint.py)        │         │ (OpenJDK 25\)                  │  │  
-│  │  \- Health Check: 10000 ├────────►│  \- HTTP API: 127.0.0.1:8080    │  │  
-│  │  \- Periodic Git Sync   │         └───────────────▲───────────────┘  │  
-│  └───────────┬────────────┘                         │                  │  
-│              │ Launches                             │ WebSockets       │  
-│  ┌───────────▼────────────┐                         │                  │  
-│  │ Hermes Gateway Process │─────────────────────────┘                  │  
-│  │ (hermes gateway)       │                                            │  
-│  └───────────┬────────────┘                                            │  
-│              │ API Calls                                               │  
-│              ▼                                                         │  
-│     Groq LLM Engine                                                    │  
-└──────────────┬─────────────────────────────────────────────────────────┘  
-               │  
-    Syncs snapshot every 3 mins  
-               ▼  
-   GitHub Repository (bodhi-state / latest.tar.gz)
+┌─────────────────────────────────────────────────────────────────┐
+│ Render container (Debian Bookworm + Docker)                     │
+│                                                                 │
+│  ┌────────────────────────┐     ┌────────────────────────────┐  │
+│  │ Python supervisor      │     │ signal-cli v0.14.8         │  │
+│  │ (scripts/entrypoint.py)│     │ OpenJDK 25                 │  │
+│  │  - Health check :10000 ├────►│  HTTP API 127.0.0.1:8080   │  │
+│  │  - Git sync every 3m   │     └──────────────▲─────────────┘  │
+│  └───────────┬────────────┘                    │                │
+│              │ launches                        │                │
+│  ┌───────────▼────────────┐                    │                │
+│  │ Hermes gateway         ├────────────────────┘                │
+│  │ (hermes gateway)       │                                     │
+│  └───────────┬────────────┘                                     │
+│              │                                                  │
+│              ▼                                                  │
+│         Groq (OpenAI-compatible API)                            │
+└──────────────┬──────────────────────────────────────────────────┘
+               │ latest.tar.gz every 3 minutes
+               ▼
+     GitHub repo (bodhi-state)
 ```
 
-## **Prerequisites**
+## Prerequisites
 
-Before starting deployment, prepare the following resources:
+- [Render](https://render.com/) account for the Docker web service
+- Groq API key from [console.groq.com](https://console.groq.com/)
+- Signal account (dedicated number or secondary line)
+- GitHub personal access token with `repo` scope for state backups
 
-1. **Render Account**: For hosting the Dockerized web service.  
-2. **Groq API Key**: Obtain a free API key from [console.groq.com](https://console.groq.com/).  
-3. **Signal Account**: A dedicated phone number or secondary line (VOIP/eSIM) registered to Signal.  
-4. **GitHub Personal Access Token (PAT)**: To enable remote state persistence.
+## 1. State backup (`bodhi-state`)
 
-## **1\. Setup State Backup (bodhi-state Repository)**
+Render disks are ephemeral. On a schedule, `entrypoint.py` packs `/root/.hermes` and `/root/.local/share/signal-cli` into `latest.tar.gz` and force-pushes that archive to a private GitHub repo.
 
-Since Render container filesystems are ephemeral, all memory (USER.md), agent directives (SOUL.md), SQLite thread states, and Signal cryptographic key ratchets are compressed into latest.tar.gz and synchronized to a private GitHub repository every 3 minutes.
+### Create the backup repository
 
-### **Step 1.1: Create Private Backup Repository**
+1. Create a GitHub repository named `bodhi-state` (or match `BACKUP_REPO`).
+2. Set visibility to **Private**.
+3. Leave it empty: no README, `.gitignore`, or license.
 
-1. Log into GitHub and create a new repository named bodhi-state.  
-2. Set the visibility to **Private**.  
-3. Do **not** initialize it with a README, .gitignore, or license. Leave it completely empty.
+### Create a GitHub PAT
 
-### **Step 1.2: Generate GitHub Personal Access Token (PAT)**
+1. GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**.
+2. Generate a classic token.
+3. Note: `Render Bodhi State Sync`.
+4. Scope: `repo`.
+5. Copy the token (`ghp_...`) into Render as `GITHUB_TOKEN`.
 
-1. Go to **GitHub Settings $\rightarrow$ Developer Settings $\rightarrow$ Personal Access Tokens $\rightarrow$ Tokens (classic)**.  
-2. Click **Generate new token (classic)**.  
-3. Set Note to Render Bodhi State Sync.  
-4. Select Expiration (e.g., No expiration or 90 days).  
-5. Select the **repo** scope (Full control of private repositories).  
-6. Click **Generate token** and copy the token string (ghp\_...).
+## 2. Signal setup
 
-## **2\. Signal Setup & Phone Reconnection**
+`signal-cli` stores identity and ratchets under `/root/.local/share/signal-cli`. That directory is included in the GitHub snapshot.
 
-Signal authentication requires signal-cli to register or link a secondary device. The state directory (/root/.local/share/signal-cli) is preserved inside bodhi-state.
+### Link as a secondary device (recommended)
 
-### **Initial Registration / Linking via CLI**
+```bash
+signal-cli link -n "Bodhi-Render"
+```
 
-If you are linking Bodhi to a primary phone or registering a new number:
+1. On your phone: Signal → **Settings** → **Linked devices** → **Link new device**.
+2. Scan the QR code (or open the `tsdevice://` URL).
+3. Archive `~/.local/share/signal-cli` into the first `bodhi-state` backup, or let the running container sync after a successful link.
 
-#### **Method A: Link as a Secondary Device (Recommended)**
+### Register a standalone number
 
-1. Install signal-cli locally on your machine or run inside Docker:  
-2. Bash
+```bash
+signal-cli -u +YOUR_NUMBER register
+signal-cli -u +YOUR_NUMBER verify CODE
+```
 
-signal-cli link \-n "Bodhi-Render" | xrdb \- \# Generates tsdevice:// link or terminal QR code
+### Reconnecting after a phone change
 
-3.   
-4.   
-5. Open Signal on your phone $\rightarrow$ **Settings $\rightarrow$ Linked Devices $\rightarrow$ Link New Device**.  
-6. Scan the QR code generated by signal-cli.  
-7. Copy the resulting data directory (\~/.local/share/signal-cli) into your state backup archive.
+If you reinstall Signal or switch handsets, sessions can desync (`InvalidMessageException`).
 
-#### **Method B: Register a Standalone Number**
+1. The entrypoint already drops leftover session databases on boot.
+2. From a machine with `signal-cli` and the bot account:
 
-1. Request SMS verification code:  
-2. Bash
+   ```bash
+   signal-cli -u +BOT_NUMBER send -m "[Session Reset]" --end-session +YOUR_NUMBER
+   ```
 
-signal-cli \-u \+YOUR\_NUMBER register
+3. Message Bodhi from the new phone so `signal-cli` can negotiate a new ratchet.
 
-3.   
-4.   
-5. Verify code received via SMS:  
-6. Bash
+## 3. Configuration
 
-signal-cli \-u \+YOUR\_NUMBER verify CODE
+Tracked templates live in `config/`. On boot, `scripts/entrypoint.py` expands environment variables and writes them into `/root/.hermes/`.
 
-7.   
-8. 
+| File | Role |
+| --- | --- |
+| `config/config.yaml` | Hermes model, Groq endpoint, memory, curator, Signal gateway |
+| `config/SOUL.md` | Agent identity; copied to `/root/.hermes/SOUL.md` on every boot |
+| `config/USER.md` | Optional user-profile seed; copied only if `/root/.hermes/USER.md` is missing |
 
-### **Reconnecting When Changing Phones or Re-keying**
+Hermes requires:
 
-If you change your primary phone or reinstall the Signal app on your personal device, the Signal Double Ratchet session becomes desynced, producing InvalidMessageException decryption errors.
+- a singular `model:` block (provider, default model id, Groq `base_url`)
+- `custom_providers:` as a **YAML list** (`- name: groq`), not a mapping
 
-#### **To Re-establish Session Without Wiping Registration:**
+Primary model is `openai/gpt-oss-120b`. Auxiliary work and fallback use `openai/gpt-oss-20b`. Groq retired `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` for free/developer accounts on 16 August 2026.
 
-1. Bodhi automatically attempts to reset key ratchets on boot.  
-2. If errors persist, send /sethome or a direct reset command from your Signal device to force key re-negotiation:  
-3. Bash
+## 4. Deploy on Render
 
-signal-cli \-u \+REGISTERED\_BOT\_NUMBER send \-m "\[Session Reset\]" \--end-session \+YOUR\_PERSONAL\_NUMBER
+`render.yaml` is already in the repo. Required environment variables:
 
-4.   
-5.   
-6. If you migrate your personal phone to a new handset, open Signal on your new phone, message Bodhi's number, and send a fresh message. signal-cli will auto-negotiate a new ratchet.
+| Variable | Example | Purpose |
+| --- | --- | --- |
+| `PORT` | `10000` | HTTP health check bind port |
+| `GROQ_API_KEY` | `gsk_...` | Groq API key |
+| `SIGNAL_ACCOUNT` | `+15555550100` | Number registered with Signal |
+| `SIGNAL_ALLOWED_USERS` | `+15555550100` | Allowed Signal senders (comma-separated) |
+| `SIGNAL_HTTP_URL` | `http://127.0.0.1:8080` | `signal-cli` daemon URL |
+| `GITHUB_TOKEN` | `ghp_...` | PAT with `repo` write access |
+| `GITHUB_USER` | `your-github-username` | GitHub username |
+| `BACKUP_REPO` | `bodhi-state` | Private backup repository name |
 
-## **3\. Configuration & Persona Templates**
+### From the Render dashboard
 
-The main repository (personal-ai-assistant) contains tracked configuration templates inside config/.
+1. **New** → **Web Service**.
+2. Connect this GitHub repository.
+3. Runtime: **Docker**.
+4. Instance: Free or Starter.
+5. Fill in the environment variables above (secrets stay in the dashboard, not in git).
+6. Create the service.
 
-### **config/config.yaml**
+## 5. Local Docker test
 
-Hermes validates two required shapes here:
+```bash
+docker build -t bodhi-agent .
 
-- `model:` (singular) — which provider and model id to use
-- `custom_providers:` as a **YAML list** (`- name:` …), not a mapping
-
-See `config/config.yaml` for the live file. Groq is the custom endpoint; primary model is `llama-3.3-70b-versatile`, with `llama-3.1-8b-instant` for auxiliary work and fallback.
-
-### **config/SOUL.md (Agent Directive)**
-
-Defines Bodhi's identity, core boundaries, and execution rules. Synced to /root/.hermes/SOUL.md on every container boot.
-
-### **config/USER.md (User Profile Seed)**
-
-Provides default user context (e.g., location, preferences, technical domain). Seeded to /root/.hermes/USER.md on clean boot if no backup exists.
-
-## **4\. Deployment to Render**
-
-### **Step 4.1: render.yaml Specification**
-
-Include a render.yaml file in the root of your project:
-
-YAML  
-services:  
-  \- type: web  
-    name: personal-ai-assistant  
-    env: docker  
-    plan: free  
-    region: oregon  
-    healthCheckPath: /  
-    autoDeploy: true  
-    envVars:  
-      \- key: PORT  
-        value: 10000  
-      \- key: GROQ\_API\_KEY  
-        sync: false  
-      \- key: SIGNAL\_ACCOUNT  
-        sync: false  
-      \- key: SIGNAL\_ALLOWED\_USERS  
-        sync: false  
-      \- key: SIGNAL\_HTTP\_URL  
-        value: "http\://127.0.0.1:8080"  
-      \- key: GITHUB\_TOKEN  
-        sync: false  
-      \- key: GITHUB\_USER  
-        sync: false  
-      \- key: BACKUP\_REPO  
-        value: "bodhi-state"
-
-### **Step 4.2: Render Web Service Setup**
-
-1. Log into **Render Dashboard** and click **New \+ $\rightarrow$ Web Service**.  
-2. Connect your personal-ai-assistant GitHub repository.  
-3. Select **Docker** as the Runtime.  
-4. Set Instance Type to **Free** (or Starter).  
-5. Populate the **Environment Variables** in Render Dashboard:
-
-| Environment Variable | Example Value | Purpose |
-| :---- | :---- | :---- |
-| PORT | 10000 | Render HTTP health check binding port |
-| GROQ\_API\_KEY | gsk\_... | Groq API Key for Llama-3 models |
-| SIGNAL\_ACCOUNT | \+14807388729 | Phone number registered on Signal |
-| SIGNAL\_ALLOWED\_USERS | \+14807388729 | Authorized Signal users (comma-separated) |
-| GITHUB\_TOKEN | ghp\_... | GitHub PAT with repo write access |
-| GITHUB\_USER | your-github-username | GitHub Username |
-| BACKUP\_REPO | bodhi-state | Remote state backup repository name |
-
-6.   
-   Click **Create Web Service**.
-
-## **5\. Local Docker Testing**
-
-To test the container locally before pushing to Render:
-
-Bash  
-\# Build the Docker image  
-docker build \-t bodhi-agent .
-
-\# Run container locally with environment variables  
-docker run \-d \\  
-  \--name bodhi\_container \\  
-  \-p 10000:10000 \\  
-  \-e PORT=10000 \\  
-  \-e GROQ\_API\_KEY="gsk\_..." \\  
-  \-e SIGNAL\_ACCOUNT="+14807388729" \\  
-  \-e SIGNAL\_ALLOWED\_USERS="+14807388729" \\  
-  \-e GITHUB\_TOKEN="ghp\_..." \\  
-  \-e GITHUB\_USER="your-username" \\  
-  \-e BACKUP\_REPO="bodhi-state" \\  
+docker run -d \
+  --name bodhi_container \
+  -p 10000:10000 \
+  -e PORT=10000 \
+  -e GROQ_API_KEY="gsk_..." \
+  -e SIGNAL_ACCOUNT="+15555550100" \
+  -e SIGNAL_ALLOWED_USERS="+15555550100" \
+  -e GITHUB_TOKEN="ghp_..." \
+  -e GITHUB_USER="your-username" \
+  -e BACKUP_REPO="bodhi-state" \
   bodhi-agent
+```
 
-Check health status at http\://localhost:10000/.
+Health check: <http://localhost:10000/>.
 
-## **6\. Maintenance & Troubleshooting**
+## 6. Troubleshooting
 
-### **1\. InvalidMessageException / Decryption Failures**
+### `InvalidMessageException` / decryption failures
 
-* **Cause**: Desync between signal-cli local session keys and the Signal server.  
-* **Fix**: The entrypoint automatically purges legacy sessions and sends a re-key request. Ensure SIGNAL\_ALLOWED\_USERS includes your exact phone number with country code.
+Desync between local `signal-cli` session keys and Signal's servers. Confirm `SIGNAL_ALLOWED_USERS` is the full E.164 number (`+` and country code). Use the `--end-session` command in section 2 if errors continue.
 
-### **2\. Render Deployment Timeouts (No open ports detected)**
+### Render: no open ports detected
 
-* **Cause**: signal-cli initialization taking \>30 seconds on container start before opening port 10000\.  
-* **Fix**: scripts/entrypoint.py binds the HTTP health check server on 0.0.0.0:10000 in a background thread as the very first line of execution.
+`signal-cli` can take more than 30 seconds to start. `scripts/entrypoint.py` binds `0.0.0.0:10000` in a background thread before any other work so the health check succeeds immediately.
 
-### **3\. OpenRouter 401 Authentication Errors**
+### Groq `model_not_found` (HTTP 404)
 
-* **Cause**: Legacy state databases (state.db, gateway.db) or unexpanded variable strings forcing fallbacks to OpenRouter default routes.  
-* **Fix**: scripts/entrypoint.py purges legacy SQLite files on boot, expands \${GROQ\_API\_KEY} into /root/.hermes/config.yaml, and explicitly sets custom\_providers and model.json to route to \[https\://api.groq.com/openai/v1\](https\://api.groq.com/openai/v1).
+`llama-3.3-70b-versatile` and `llama-3.1-8b-instant` are enterprise-only after Groq's 16 August 2026 shutdown. Use `openai/gpt-oss-120b` and `openai/gpt-oss-20b` (see `config/config.yaml`).
 
+### OpenRouter 401 errors
+
+Stale SQLite state or unexpanded `${GROQ_API_KEY}` can send traffic to OpenRouter. On boot the entrypoint purges legacy session files, expands variables into `/root/.hermes/config.yaml`, and points the custom provider at `https://api.groq.com/openai/v1`.
