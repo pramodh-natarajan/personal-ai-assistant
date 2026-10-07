@@ -45,6 +45,8 @@ os.environ["GEMINI_API_KEY"] = GEMINI_KEY
 os.environ["HERMES_AUXILIARY_PROVIDER"] = TARGET_PROVIDER
 os.environ["HERMES_AUXILIARY_MODEL"] = AUXILIARY_MODEL
 
+signal_process = None
+
 def bind_health_server_instantly():
     port = int(os.environ.get("PORT", 10000))
     class HealthHandler(SimpleHTTPRequestHandler):
@@ -91,23 +93,14 @@ def restore_state():
     else:
         print("[!] GITHUB_TOKEN or GITHUB_USER missing. Skipping state restoration.", flush=True)
 
-def purge_legacy_state():
-    print("[*] Purging legacy session threads, databases, and config caches...", flush=True)
-    protected_files = {"SOUL.md", "USER.md"}
-    for root, dirs, files in os.walk(HERMES_DIR, topdown=False):
-        for f in files:
-            if f not in protected_files:
-                filepath = os.path.join(root, f)
-                try:
-                    os.remove(filepath)
-                except Exception:
-                    pass
-        for d in dirs:
-            dirpath = os.path.join(root, d)
-            try:
-                shutil.rmtree(dirpath, ignore_errors=True)
-            except Exception:
-                pass
+def safe_cleanup_state():
+    """Removes temporary or cache lockfiles without touching SQLite state.db, profiles, or session histories."""
+    print("[*] Cleaning up stale lock files...", flush=True)
+    for lock_file in glob.glob(os.path.join(HERMES_DIR, "*.lock")):
+        try:
+            os.remove(lock_file)
+        except Exception:
+            pass
 
 def configure_hermes():
     print("[*] Writing Hermes configuration, profiles, and model.json...", flush=True)
@@ -177,7 +170,8 @@ max_tokens: 2048
     with open(os.path.join(HERMES_DIR, "profiles", "default.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)
 
-def wait_for_signal_daemon():
+def start_signal_daemon():
+    global signal_process
     if not SIGNAL_ACCOUNT:
         print("[!] SIGNAL_ACCOUNT environment variable not set. Skipping signal-cli daemon.", flush=True)
         return
@@ -186,19 +180,29 @@ def wait_for_signal_daemon():
     time.sleep(1)
 
     print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...", flush=True)
-    subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
+    signal_process = subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
     
-    print("[*] Polling 127.0.0.1:8080 TCP socket until ready (up to 90s)...", flush=True)
     for elapsed in range(1, 91):
         try:
             with socket.create_connection(("127.0.0.1", 8080), timeout=1):
                 print(f"[+] signal-cli daemon TCP socket connected on port 8080 after {elapsed}s!", flush=True)
-                return
+                return True
         except Exception:
             if elapsed % 5 == 0:
                 print(f"[*] Waiting for signal-cli port 8080 ({elapsed}s elapsed)...", flush=True)
             time.sleep(1)
-    print("[!] Warning: signal-cli daemon socket check timed out after 90 seconds.", flush=True)
+    return False
+
+def signal_supervisor_loop():
+    """Monitors signal-cli socket on port 8080 every 15 seconds and restarts it if socket drops."""
+    while True:
+        time.sleep(15)
+        try:
+            with socket.create_connection(("127.0.0.1", 8080), timeout=2):
+                pass
+        except Exception:
+            print("[!] Signal daemon TCP socket check failed. Restarting signal-cli...", flush=True)
+            start_signal_daemon()
 
 def sync_to_github():
     if not GITHUB_TOKEN or not GITHUB_USER:
@@ -225,7 +229,7 @@ def sync_to_github():
 
 def periodic_sync_loop():
     while True:
-        time.sleep(600)
+        time.sleep(600)  # Sync to GitHub every 10 minutes
         sync_to_github()
 
 def run_hermes_supervisor():
@@ -247,12 +251,13 @@ def main():
         run_cmd('git config --global user.email "bodhi@render.local"')
 
         restore_state()
-        purge_legacy_state()
+        safe_cleanup_state()
         configure_hermes()
 
         threading.Thread(target=periodic_sync_loop, daemon=True).start()
 
-        wait_for_signal_daemon()
+        start_signal_daemon()
+        threading.Thread(target=signal_supervisor_loop, daemon=True).start()
 
         run_hermes_supervisor()
 
