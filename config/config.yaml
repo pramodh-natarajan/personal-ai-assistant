@@ -6,7 +6,7 @@ agent:
 # Primary Hermes model block pointing to Google AI Studio OpenAI endpoint
 model:
   provider: "custom"
-  default: "gemini-2.0-flash"
+  default: "gemini-3.8-flash"
   base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
   api_key: "${GEMINI_API_KEY}"
   max_tokens: 2048
@@ -15,32 +15,32 @@ custom_providers:
   - name: groq
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
-    model: "gemini-2.0-flash"
+    model: "gemini-3.8-flash"
 
 auxiliary:
   compression:
     provider: "custom"
-    model: "gemini-2.0-flash"
+    model: "gemini-3.8-flash"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
   title_generation:
     provider: "custom"
-    model: "gemini-2.0-flash"
+    model: "gemini-3.8-flash"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
   curator:
     provider: "custom"
-    model: "gemini-2.0-flash"
+    model: "gemini-3.8-flash"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
 
 fallback_providers:
   - provider: "custom"
-    model: "gemini-2.0-flash"
+    model: "gemini-3.8-flash"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
 
-# Disables unused tool schemas to minimize prompt overhead
+# Disables unused tool schemas
 tools:
   disabled:
     - "browser"

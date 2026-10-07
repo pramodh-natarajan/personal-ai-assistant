@@ -19,8 +19,8 @@ HERMES_DIR = "/root/.hermes"
 SIGNAL_DIR = "/root/.local/share/signal-cli"
 BACKUP_DIR = "/tmp/bodhi-state"
 
-TARGET_MODEL = "gemini-2.0-flash"
-AUXILIARY_MODEL = "gemini-2.0-flash"
+TARGET_MODEL = "gemini-3.8-flash"
+AUXILIARY_MODEL = "gemini-3.8-flash"
 TARGET_PROVIDER = "custom"
 TARGET_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
