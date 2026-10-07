@@ -27,11 +27,13 @@ GITHUB_USER = os.environ.get("GITHUB_USER", "")
 BACKUP_REPO = os.environ.get("BACKUP_REPO", "bodhi-state")
 SIGNAL_ACCOUNT = os.environ.get("SIGNAL_ACCOUNT", "")
 
+# Disable OpenRouter environment variables
 os.environ.pop("OPENROUTER_API_KEY", None)
 os.environ["HERMES_PROVIDER"] = "custom"
 os.environ["HERMES_MODEL"] = TARGET_MODEL
 os.environ["OPENAI_BASE_URL"] = TARGET_BASE_URL
 os.environ["OPENAI_API_KEY"] = GROQ_KEY
+os.environ["GROQ_API_KEY"] = GROQ_KEY
 
 def bind_health_server_instantly():
     port = int(os.environ.get("PORT", 10000))
@@ -103,6 +105,7 @@ def configure_hermes():
         f"HERMES_MODEL={TARGET_MODEL}\n"
         f"OPENAI_BASE_URL={TARGET_BASE_URL}\n"
         f"OPENAI_API_KEY={GROQ_KEY}\n"
+        f"GROQ_API_KEY={GROQ_KEY}\n"
     )
     with open(os.path.join(HERMES_DIR, ".env"), "w", encoding="utf-8") as f:
         f.write(env_content)
@@ -114,25 +117,24 @@ base_url: {TARGET_BASE_URL}
 api_key: {GROQ_KEY}
 max_tokens: 2048
 """
+    # Write both personal.yaml and default.yaml to prevent profile fallback issues
     with open(os.path.join(HERMES_DIR, "profiles", "personal.yaml"), "w", encoding="utf-8") as f:
+        f.write(profile_content)
+    with open(os.path.join(HERMES_DIR, "profiles", "default.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)
 
 def purge_stale_sessions():
-    print("[*] Purging stale thread sessions and SQLite caches...", flush=True)
-    stale_paths = [
-        os.path.join(HERMES_DIR, "sessions"),
-        os.path.join(HERMES_DIR, "threads"),
-        os.path.join(HERMES_DIR, "cache"),
-    ]
-    for p in stale_paths:
-        if os.path.exists(p):
-            shutil.rmtree(p, ignore_errors=True)
-    
-    for db_file in glob.glob(os.path.join(HERMES_DIR, "*.db*")):
-        try:
-            os.remove(db_file)
-        except Exception:
-            pass
+    print("[*] Recursively purging stale thread state and SQLite databases...", flush=True)
+    for root, dirs, files in os.walk(HERMES_DIR):
+        for d in list(dirs):
+            if d in ["sessions", "threads", "cache", "db", "state", "history"]:
+                shutil.rmtree(os.path.join(root, d), ignore_errors=True)
+        for f in files:
+            if f.endswith((".db", ".db-journal", ".db-wal", ".db-shm", ".sqlite", ".sqlite3")):
+                try:
+                    os.remove(os.path.join(root, f))
+                except Exception:
+                    pass
 
 def wait_for_signal_daemon():
     if not SIGNAL_ACCOUNT:
