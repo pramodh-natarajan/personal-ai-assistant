@@ -3,7 +3,7 @@ agent:
   default_profile: "personal"
   generate_titles: false
 
-# Primary Hermes model block pointing to Google AI Studio OpenAI endpoint
+# Primary Hermes model block pointing to Google AI Studio gemini-3.8-flash
 model:
   provider: "custom"
   default: "gemini-3.8-flash"
@@ -12,7 +12,7 @@ model:
   max_tokens: 2048
 
 custom_providers:
-  - name: groq
+  - name: gemini
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
     model: "gemini-3.8-flash"
@@ -20,27 +20,28 @@ custom_providers:
 auxiliary:
   compression:
     provider: "custom"
-    model: "gemini-3.8-flash"
+    model: "gemini-3.5-flash-lite"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
   title_generation:
     provider: "custom"
-    model: "gemini-3.8-flash"
+    model: "gemini-3.5-flash-lite"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
   curator:
     provider: "custom"
-    model: "gemini-3.8-flash"
+    model: "gemini-3.5-flash-lite"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
 
+# In-house Google AI Studio fallback to gemini-3.5-flash-lite on 503 capacity spikes
 fallback_providers:
   - provider: "custom"
-    model: "gemini-3.8-flash"
+    model: "gemini-3.5-flash-lite"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
 
-# Disables unused tool schemas
+# Disabled tools to minimize prompt overhead
 tools:
   disabled:
     - "browser"

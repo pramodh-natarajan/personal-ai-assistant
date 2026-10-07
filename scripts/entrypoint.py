@@ -20,7 +20,7 @@ SIGNAL_DIR = "/root/.local/share/signal-cli"
 BACKUP_DIR = "/tmp/bodhi-state"
 
 TARGET_MODEL = "gemini-3.8-flash"
-AUXILIARY_MODEL = "gemini-3.8-flash"
+AUXILIARY_MODEL = "gemini-3.5-flash-lite"
 TARGET_PROVIDER = "custom"
 TARGET_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
@@ -31,6 +31,9 @@ BACKUP_REPO = os.environ.get("BACKUP_REPO", "bodhi-state")
 SIGNAL_ACCOUNT = os.environ.get("SIGNAL_ACCOUNT", "")
 
 os.environ.pop("OPENROUTER_API_KEY", None)
+os.environ.pop("GROQ_API_KEY", None)
+os.environ.pop("NVIDIA_API_KEY", None)
+
 os.environ["HERMES_PROVIDER"] = TARGET_PROVIDER
 os.environ["HERMES_MODEL"] = TARGET_MODEL
 os.environ["OPENAI_BASE_URL"] = TARGET_BASE_URL
@@ -86,7 +89,7 @@ def restore_state():
         print("[!] GITHUB_TOKEN or GITHUB_USER missing. Skipping state restoration.", flush=True)
 
 def purge_legacy_state():
-    print("[*] Purging legacy session threads, databases, and OpenRouter config caches...", flush=True)
+    print("[*] Purging legacy session threads, databases, and config caches...", flush=True)
     protected_files = {"SOUL.md", "USER.md"}
     for root, dirs, files in os.walk(HERMES_DIR, topdown=False):
         for f in files:
@@ -217,7 +220,6 @@ def sync_to_github():
 
 def periodic_sync_loop():
     while True:
-        # Sleep for 4 hours (14,400 seconds) between background GitHub state pushes
         time.sleep(14400)
         sync_to_github()
 
