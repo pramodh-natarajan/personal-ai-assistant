@@ -1,8 +1,8 @@
 # Bodhi
 
-Persistent Hermes Agent on Render, with Signal as the chat interface and Groq (`openai/gpt-oss-120b` / `openai/gpt-oss-20b`) as the inference backend.
+Persistent Hermes Agent on Render, with Signal as the chat interface and Google AI Studio (`gemini-3.8-flash` / `gemini-3.5-flash-lite`) as the primary inference backend.
 
-Bodhi restores memory and Signal session state from a private GitHub backup on boot, runs `signal-cli` as an HTTP daemon, and supervises `hermes gateway`. Snapshots are pushed back to GitHub every three minutes.
+Bodhi restores memory and Signal session state from a private GitHub backup on boot, runs `signal-cli` as an HTTP daemon, and supervises `hermes gateway`. Snapshots are pushed back to GitHub every 4 hours.
 
 ## Architecture
 
@@ -23,7 +23,7 @@ Bodhi restores memory and Signal session state from a private GitHub backup on b
 │  └───────────┬────────────┘                                     │
 │              │                                                  │
 │              ▼                                                  │
-│         Groq (OpenAI-compatible API)                            │
+│         Google AI Studio (OpenAI-compatible API)                │
 └──────────────┬──────────────────────────────────────────────────┘
                │ latest.tar.gz every 3 minutes
                ▼
@@ -33,13 +33,13 @@ Bodhi restores memory and Signal session state from a private GitHub backup on b
 ## Prerequisites
 
 - [Render](https://render.com/) account for the Docker web service
-- Groq API key from [console.groq.com](https://console.groq.com/)
+- Google AI Studio API key from [aistudio.google.com](https://aistudio.google.com/)
 - Signal account (dedicated number or secondary line)
 - GitHub personal access token with `repo` scope for state backups
 
 ## 1. State backup (`bodhi-state`)
 
-Render disks are ephemeral. On a schedule, `entrypoint.py` packs `/root/.hermes` and `/root/.local/share/signal-cli` into `latest.tar.gz` and force-pushes that archive to a private GitHub repo.
+Render disks are ephemeral. Every 4 hours, `entrypoint.py` packs `/root/.hermes` and `/root/.local/share/signal-cli` into `latest.tar.gz` and force-pushes that archive to a private GitHub repo.
 
 ### Create the backup repository
 
@@ -59,35 +59,59 @@ Render disks are ephemeral. On a schedule, `entrypoint.py` packs `/root/.hermes`
 
 `signal-cli` stores identity and ratchets under `/root/.local/share/signal-cli`. That directory is included in the GitHub snapshot.
 
-### Link as a secondary device (recommended)
+### Link as a secondary device via Docker (Exact One-Liner)
+
+To link Bodhi without installing local Java dependencies, run this interactive Python/Docker snippet to download `signal-cli` v0.14.8 natively, mount `~/.local/share/signal-cli`, and render the active QR code directly in your terminal:
 
 ```bash
-signal-cli link -n "Bodhi-Render"
+docker run -it -v ~/.local/share/signal-cli:/root/.local/share/signal-cli python:3.11-slim bash -c '
+  set -e
+  echo "[*] Preparing signal-cli environment..."
+  apt-get update && apt-get install -y curl qrencode > /dev/null 2>&1
+  curl -fL -s -o /tmp/signal-cli-native.tar.gz "[https://github.com/AsamK/signal-cli/releases/download/v0.14.8/signal-cli-0.14.8-Linux-native.tar.gz](https://github.com/AsamK/signal-cli/releases/download/v0.14.8/signal-cli-0.14.8-Linux-native.tar.gz)"
+  tar xf /tmp/signal-cli-native.tar.gz -C /opt
+  SIGNAL_BIN=$(find /opt -name signal-cli -type f | head -n 1)
+
+  python3 -c "
+import subprocess
+
+proc = subprocess.Popen([\"$SIGNAL_BIN\", \"link\", \"-n\", \"Bodhi\"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+while True:
+    line = proc.stdout.readline()
+    if not line:
+        break
+    if \"sgnl://\" in line:
+        uri = line.strip()
+        print(\"\n============================================================\", flush=True)
+        print(\"   SCAN THIS QR CODE IMMEDIATELY WITH YOUR SIGNAL APP       \", flush=True)
+        print(\"============================================================\n\", flush=True)
+        subprocess.run([\"qrencode\", \"-t\", \"UTF8\", uri])
+        print(\"\n[*] QR code active! Waiting for phone pairing confirmation...\n\", flush=True)
+    else:
+        print(line, end=\"\", flush=True)
+
+proc.wait()
+"
+'
 ```
 
 1. On your phone: Signal → **Settings** → **Linked devices** → **Link new device**.
-2. Scan the QR code (or open the `tsdevice://` URL).
-3. Archive `~/.local/share/signal-cli` into the first `bodhi-state` backup, or let the running container sync after a successful link.
+2. Scan the terminal QR code immediately before the ratchet link expires.
+3. Once linked, compress `~/.local/share/signal-cli` into `latest.tar.gz` and push it to your private `bodhi-state` GitHub repo so Render can restore the active session on container boot.
 
-### Register a standalone number
-
-```bash
-signal-cli -u +YOUR_NUMBER register
-signal-cli -u +YOUR_NUMBER verify CODE
-```
-
-### Reconnecting after a phone change
+### Reconnecting after a handset change
 
 If you reinstall Signal or switch handsets, sessions can desync (`InvalidMessageException`).
 
-1. The entrypoint already drops leftover session databases on boot.
-2. From a machine with `signal-cli` and the bot account:
+1. The container entrypoint automatically purges stale thread and session databases on boot.
+2. Reset the ratchet from a machine running signal-cli:
 
    ```bash
    signal-cli -u +BOT_NUMBER send -m "[Session Reset]" --end-session +YOUR_NUMBER
    ```
 
-3. Message Bodhi from the new phone so `signal-cli` can negotiate a new ratchet.
+3. Send a new message to Bodhi from your handset so `signal-cli` can re-negotiate keys.
 
 ## 3. Configuration
 
@@ -99,12 +123,11 @@ Tracked templates live in `config/`. On boot, `scripts/entrypoint.py` expands en
 | `config/SOUL.md` | Agent identity; copied to `/root/.hermes/SOUL.md` on every boot |
 | `config/USER.md` | Optional user-profile seed; copied only if `/root/.hermes/USER.md` is missing |
 
-Hermes requires:
+### Inference & Resilience Model Setup
 
-- a singular `model:` block (provider, default model id, Groq `base_url`)
-- `custom_providers:` as a **YAML list** (`- name: groq`), not a mapping
-
-Primary model is `openai/gpt-oss-120b`. Auxiliary work and fallback use `openai/gpt-oss-20b`. Groq retired `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` for free/developer accounts on 16 August 2026.
+- Primary Model: `gemini-3.8-flash` via Google AI Studio's OpenAI bridge(`https://generativelanguage.googleapis.com/v1beta/openai/`).
+- Auxiliary & Fallback Model: `gemini-3.5-flash-lite`. Triggered automatically during primary capacity spikes (503s) or timeouts.
+- Tool Optimization: Unused built-in tools (`browser`, `computer_use`, `kanban`, `vision`, etc.) are explicitly listed under `tools.disabled` in `config/config.yaml` to minimize prompt token overhead.
 
 ## 4. Deploy on Render
 
@@ -113,7 +136,7 @@ Primary model is `openai/gpt-oss-120b`. Auxiliary work and fallback use `openai/
 | Variable | Example | Purpose |
 | --- | --- | --- |
 | `PORT` | `10000` | HTTP health check bind port |
-| `GROQ_API_KEY` | `gsk_...` | Groq API key |
+| `GEMINI_API_KEY` | `AIzaSy...` | Google AI Studio API key |
 | `SIGNAL_ACCOUNT` | `+15555550100` | Number registered with Signal |
 | `SIGNAL_ALLOWED_USERS` | `+15555550100` | Allowed Signal senders (comma-separated) |
 | `SIGNAL_HTTP_URL` | `http://127.0.0.1:8080` | `signal-cli` daemon URL |
@@ -139,7 +162,7 @@ docker run -d \
   --name bodhi_container \
   -p 10000:10000 \
   -e PORT=10000 \
-  -e GROQ_API_KEY="gsk_..." \
+  -e GEMINI_API_KEY="AIzaSy..." \
   -e SIGNAL_ACCOUNT="+15555550100" \
   -e SIGNAL_ALLOWED_USERS="+15555550100" \
   -e GITHUB_TOKEN="ghp_..." \
@@ -156,14 +179,10 @@ Health check: <http://localhost:10000/>.
 
 Desync between local `signal-cli` session keys and Signal's servers. Confirm `SIGNAL_ALLOWED_USERS` is the full E.164 number (`+` and country code). Use the `--end-session` command in section 2 if errors continue.
 
-### Render: no open ports detected
+### Google AI Studio `429 Quota Exceeded` (RPM Limits)
 
-`signal-cli` can take more than 30 seconds to start. `scripts/entrypoint.py` binds `0.0.0.0:10000` in a background thread before any other work so the health check succeeds immediately.
+Free accounts enforce strict Requests Per Minute (RPM) burst limits. If multi-step agent operations trigger back-to-back calls, requests will temporarily hit 429. Bodhi will back off and retry or pass through fallback channels. Upgrading to Pay-As-You-Go in Google Cloud Console increases RPM limits while retaining free token allowances.
 
-### Groq `model_not_found` (HTTP 404)
+### Base URL 404 Endpoint Routing Errors
 
-`llama-3.3-70b-versatile` and `llama-3.1-8b-instant` are enterprise-only after Groq's 16 August 2026 shutdown. Use `openai/gpt-oss-120b` and `openai/gpt-oss-20b` (see `config/config.yaml`).
-
-### OpenRouter 401 errors
-
-Stale SQLite state or unexpanded `${GROQ_API_KEY}` can send traffic to OpenRouter. On boot the entrypoint purges legacy session files, expands variables into `/root/.hermes/config.yaml`, and points the custom provider at `https://api.groq.com/openai/v1`.
+Ensure `base_url` retains its trailing slash (`https://generativelanguage.googleapis.com/v1beta/openai/`). Omitting the trailing slash causes underlying HTTP clients to strip the `/openai` path segment, incorrectly targeting Google's native REST endpoint instead of the OpenAI bridge.
