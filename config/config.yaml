@@ -3,10 +3,10 @@ agent:
   default_profile: "personal"
   generate_titles: false
 
-# Primary Hermes model block pointing to Google AI Studio gemini-3.8-flash
+# Primary Hermes model block pointing to gemini-3.5-flash-lite
 model:
   provider: "custom"
-  default: "gemini-3.8-flash"
+  default: "gemini-3.5-flash-lite"
   base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
   api_key: "${GEMINI_API_KEY}"
   max_tokens: 2048
@@ -15,7 +15,7 @@ custom_providers:
   - name: gemini
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
-    model: "gemini-3.8-flash"
+    model: "gemini-3.5-flash-lite"
 
 auxiliary:
   compression:
@@ -34,14 +34,13 @@ auxiliary:
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
 
-# In-house Google AI Studio fallback to gemini-3.5-flash-lite on 503 capacity spikes
+# Fallback provider using gemini-3.8-flash
 fallback_providers:
   - provider: "custom"
-    model: "gemini-3.5-flash-lite"
+    model: "gemini-3.8-flash"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: "${GEMINI_API_KEY}"
 
-# Disabled tools to minimize prompt overhead
 tools:
   disabled:
     - "browser"

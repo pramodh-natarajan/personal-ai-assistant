@@ -19,7 +19,7 @@ HERMES_DIR = "/root/.hermes"
 SIGNAL_DIR = "/root/.local/share/signal-cli"
 BACKUP_DIR = "/tmp/bodhi-state"
 
-TARGET_MODEL = "gemini-3.8-flash"
+TARGET_MODEL = "gemini-3.5-flash-lite"
 AUXILIARY_MODEL = "gemini-3.5-flash-lite"
 TARGET_PROVIDER = "custom"
 TARGET_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
@@ -33,6 +33,9 @@ SIGNAL_ACCOUNT = os.environ.get("SIGNAL_ACCOUNT", "")
 os.environ.pop("OPENROUTER_API_KEY", None)
 os.environ.pop("GROQ_API_KEY", None)
 os.environ.pop("NVIDIA_API_KEY", None)
+
+os.environ["HERMES_API_CALL_STALE_TIMEOUT"] = "25"
+os.environ["HERMES_API_TIMEOUT"] = "45"
 
 os.environ["HERMES_PROVIDER"] = TARGET_PROVIDER
 os.environ["HERMES_MODEL"] = TARGET_MODEL
@@ -154,6 +157,8 @@ def configure_hermes():
         f"OPENAI_BASE_URL={TARGET_BASE_URL}\n"
         f"OPENAI_API_KEY={GEMINI_KEY}\n"
         f"GEMINI_API_KEY={GEMINI_KEY}\n"
+        f"HERMES_API_CALL_STALE_TIMEOUT=25\n"
+        f"HERMES_API_TIMEOUT=45\n"
         f"HERMES_AUXILIARY_PROVIDER={TARGET_PROVIDER}\n"
         f"HERMES_AUXILIARY_MODEL={AUXILIARY_MODEL}\n"
     )
