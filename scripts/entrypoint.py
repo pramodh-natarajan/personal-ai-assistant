@@ -72,22 +72,29 @@ def restore_state():
     else:
         print("[!] No backup repository found. Initializing clean slate.", flush=True)
 
-def reset_signal_ratchet_session():
-    """Triggers an explicit session reset to re-key Double Ratchet encryption with authorized users."""
-    allowed_users = os.environ.get("SIGNAL_ALLOWED_USERS", "").split(",")
-    for user in allowed_users:
-        user = user.strip()
-        if user:
-            print(f"[*] Sending ratchet reset signal to {user} to establish fresh session...", flush=True)
-            run_cmd(f'signal-cli -u "{SIGNAL_ACCOUNT}" send -m "[Bodhi] Encryption session re-established." --end-session "{user}"')
-
 def configure_hermes():
     print("[*] Writing Hermes configuration and profile files...", flush=True)
     os.makedirs(os.path.join(HERMES_DIR, "profiles"), exist_ok=True)
     
+    # 1. Sync tracked SOUL.md (Agent Identity & Directives) on every boot
+    soul_target = os.path.join(HERMES_DIR, "SOUL.md")
+    soul_source = "/app/config/SOUL.md"
+    if os.path.exists(soul_source):
+        shutil.copy(soul_source, soul_target)
+        print("[+] Synced /root/.hermes/SOUL.md from tracked config/SOUL.md.", flush=True)
+
+    # 2. Seed USER.md from config/USER.md if not restored from backup
+    user_target = os.path.join(HERMES_DIR, "USER.md")
+    user_source = "/app/config/USER.md"
+    if not os.path.exists(user_target) and os.path.exists(user_source):
+        shutil.copy(user_source, user_target)
+        print("[+] Seeded /root/.hermes/USER.md from tracked config/USER.md.", flush=True)
+
+    # 3. Sync config.yaml
     if os.path.exists("/app/config/config.yaml"):
         run_cmd(f"cp /app/config/config.yaml {HERMES_DIR}/config.yaml")
         
+    # 4. Write runtime .env and profile
     env_content = (
         f"HERMES_PROVIDER=custom\n"
         f"HERMES_MODEL={TARGET_MODEL}\n"
@@ -106,6 +113,14 @@ max_tokens: 2048
 """
     with open(os.path.join(HERMES_DIR, "profiles", "personal.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)
+
+def reset_signal_ratchet_session():
+    allowed_users = os.environ.get("SIGNAL_ALLOWED_USERS", "").split(",")
+    for user in allowed_users:
+        user = user.strip()
+        if user:
+            print(f"[*] Sending ratchet reset signal to {user} to establish fresh session...", flush=True)
+            run_cmd(f'signal-cli -u "{SIGNAL_ACCOUNT}" send -m "[Bodhi] Encryption session re-established." --end-session "{user}"')
 
 def purge_stale_sessions():
     print("[*] Purging stale thread sessions and SQLite caches...", flush=True)
@@ -184,7 +199,9 @@ def main():
     configure_hermes()
     purge_stale_sessions()
 
-    # Issue session reset command prior to daemon boot
+    # Save state so bodhi-state repository immediately contains SOUL.md and USER.md
+    sync_to_github()
+
     reset_signal_ratchet_session()
 
     threading.Thread(target=periodic_sync_loop, daemon=True).start()
