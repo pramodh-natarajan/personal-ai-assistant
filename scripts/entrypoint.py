@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+import json
 import shutil
 import socket
 import glob
@@ -19,6 +20,7 @@ SIGNAL_DIR = "/root/.local/share/signal-cli"
 BACKUP_DIR = "/tmp/bodhi-state"
 
 TARGET_MODEL = "llama-3.3-70b-versatile"
+AUXILIARY_MODEL = "llama-3.1-8b-instant"
 TARGET_BASE_URL = "https://api.groq.com/openai/v1"
 
 GROQ_KEY = os.environ.get("GROQ_API_KEY", "")
@@ -27,13 +29,15 @@ GITHUB_USER = os.environ.get("GITHUB_USER", "")
 BACKUP_REPO = os.environ.get("BACKUP_REPO", "bodhi-state")
 SIGNAL_ACCOUNT = os.environ.get("SIGNAL_ACCOUNT", "")
 
-# Disable OpenRouter environment variables
+# Unset OpenRouter environment variables entirely
 os.environ.pop("OPENROUTER_API_KEY", None)
 os.environ["HERMES_PROVIDER"] = "custom"
 os.environ["HERMES_MODEL"] = TARGET_MODEL
 os.environ["OPENAI_BASE_URL"] = TARGET_BASE_URL
 os.environ["OPENAI_API_KEY"] = GROQ_KEY
 os.environ["GROQ_API_KEY"] = GROQ_KEY
+os.environ["HERMES_AUXILIARY_PROVIDER"] = "custom"
+os.environ["HERMES_AUXILIARY_MODEL"] = AUXILIARY_MODEL
 
 def bind_health_server_instantly():
     port = int(os.environ.get("PORT", 10000))
@@ -82,9 +86,10 @@ def restore_state():
         print("[!] GITHUB_TOKEN or GITHUB_USER missing. Skipping state restoration.", flush=True)
 
 def configure_hermes():
-    print("[*] Writing Hermes configuration and profile files...", flush=True)
+    print("[*] Writing Hermes configuration, profiles, and model.json...", flush=True)
     os.makedirs(os.path.join(HERMES_DIR, "profiles"), exist_ok=True)
     
+    # 1. Sync SOUL.md & USER.md
     soul_target = os.path.join(HERMES_DIR, "SOUL.md")
     soul_source = "/app/config/SOUL.md"
     if os.path.exists(soul_source):
@@ -97,19 +102,37 @@ def configure_hermes():
         shutil.copy(user_source, user_target)
         print("[+] Seeded /root/.hermes/USER.md from tracked config/USER.md.", flush=True)
 
+    # 2. Copy config.yaml
     if os.path.exists("/app/config/config.yaml"):
         run_cmd(f"cp /app/config/config.yaml {HERMES_DIR}/config.yaml")
-        
+
+    # 3. Explicitly overwrite /root/.hermes/model.json to force Groq for primary & auxiliary
+    model_json_path = os.path.join(HERMES_DIR, "model.json")
+    model_data = {
+        "provider": "custom",
+        "model": TARGET_MODEL,
+        "base_url": TARGET_BASE_URL,
+        "api_key": GROQ_KEY,
+        "auxiliary_provider": "custom",
+        "auxiliary_model": AUXILIARY_MODEL
+    }
+    with open(model_json_path, "w", encoding="utf-8") as f:
+        json.dump(model_data, f, indent=2)
+
+    # 4. Write runtime .env file
     env_content = (
         f"HERMES_PROVIDER=custom\n"
         f"HERMES_MODEL={TARGET_MODEL}\n"
         f"OPENAI_BASE_URL={TARGET_BASE_URL}\n"
         f"OPENAI_API_KEY={GROQ_KEY}\n"
         f"GROQ_API_KEY={GROQ_KEY}\n"
+        f"HERMES_AUXILIARY_PROVIDER=custom\n"
+        f"HERMES_AUXILIARY_MODEL={AUXILIARY_MODEL}\n"
     )
     with open(os.path.join(HERMES_DIR, ".env"), "w", encoding="utf-8") as f:
         f.write(env_content)
         
+    # 5. Write profiles
     profile_content = f"""name: personal
 model: {TARGET_MODEL}
 provider: custom
@@ -117,22 +140,30 @@ base_url: {TARGET_BASE_URL}
 api_key: {GROQ_KEY}
 max_tokens: 2048
 """
-    # Write both personal.yaml and default.yaml to prevent profile fallback issues
     with open(os.path.join(HERMES_DIR, "profiles", "personal.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)
     with open(os.path.join(HERMES_DIR, "profiles", "default.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)
 
 def purge_stale_sessions():
-    print("[*] Recursively purging stale thread state and SQLite databases...", flush=True)
+    print("[*] Recursively purging stale thread state and legacy OpenRouter JSON files...", flush=True)
     for root, dirs, files in os.walk(HERMES_DIR):
         for d in list(dirs):
             if d in ["sessions", "threads", "cache", "db", "state", "history"]:
                 shutil.rmtree(os.path.join(root, d), ignore_errors=True)
         for f in files:
+            filepath = os.path.join(root, f)
             if f.endswith((".db", ".db-journal", ".db-wal", ".db-shm", ".sqlite", ".sqlite3")):
                 try:
-                    os.remove(os.path.join(root, f))
+                    os.remove(filepath)
+                except Exception:
+                    pass
+            elif f.endswith(".json") and f != "model.json":
+                try:
+                    with open(filepath, "r", encoding="utf-8") as jf:
+                        content = jf.read()
+                    if "openrouter" in content or "glm-5.2" in content:
+                        os.remove(filepath)
                 except Exception:
                     pass
 
