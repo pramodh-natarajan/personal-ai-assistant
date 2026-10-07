@@ -19,12 +19,12 @@ HERMES_DIR = "/root/.hermes"
 SIGNAL_DIR = "/root/.local/share/signal-cli"
 BACKUP_DIR = "/tmp/bodhi-state"
 
-TARGET_MODEL = "openai/gpt-oss-120b"
-AUXILIARY_MODEL = "openai/gpt-oss-20b"
+TARGET_MODEL = "gemini-1.5-flash"
+AUXILIARY_MODEL = "gemini-1.5-flash"
 TARGET_PROVIDER = "custom"
-TARGET_BASE_URL = "https://api.groq.com/openai/v1"
+TARGET_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
-GROQ_KEY = os.environ.get("GROQ_API_KEY", "")
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_USER = os.environ.get("GITHUB_USER", "")
 BACKUP_REPO = os.environ.get("BACKUP_REPO", "bodhi-state")
@@ -34,8 +34,8 @@ os.environ.pop("OPENROUTER_API_KEY", None)
 os.environ["HERMES_PROVIDER"] = TARGET_PROVIDER
 os.environ["HERMES_MODEL"] = TARGET_MODEL
 os.environ["OPENAI_BASE_URL"] = TARGET_BASE_URL
-os.environ["OPENAI_API_KEY"] = GROQ_KEY
-os.environ["GROQ_API_KEY"] = GROQ_KEY
+os.environ["OPENAI_API_KEY"] = GEMINI_KEY
+os.environ["GEMINI_API_KEY"] = GEMINI_KEY
 os.environ["HERMES_AUXILIARY_PROVIDER"] = TARGET_PROVIDER
 os.environ["HERMES_AUXILIARY_MODEL"] = AUXILIARY_MODEL
 
@@ -136,11 +136,11 @@ def configure_hermes():
         "provider": TARGET_PROVIDER,
         "model": TARGET_MODEL,
         "base_url": TARGET_BASE_URL,
-        "api_key": GROQ_KEY,
+        "api_key": GEMINI_KEY,
         "auxiliary_provider": TARGET_PROVIDER,
         "auxiliary_model": AUXILIARY_MODEL,
         "auxiliary_base_url": TARGET_BASE_URL,
-        "auxiliary_api_key": GROQ_KEY
+        "auxiliary_api_key": GEMINI_KEY
     }
     with open(model_json_path, "w", encoding="utf-8") as f:
         json.dump(model_data, f, indent=2)
@@ -149,8 +149,8 @@ def configure_hermes():
         f"HERMES_PROVIDER={TARGET_PROVIDER}\n"
         f"HERMES_MODEL={TARGET_MODEL}\n"
         f"OPENAI_BASE_URL={TARGET_BASE_URL}\n"
-        f"OPENAI_API_KEY={GROQ_KEY}\n"
-        f"GROQ_API_KEY={GROQ_KEY}\n"
+        f"OPENAI_API_KEY={GEMINI_KEY}\n"
+        f"GEMINI_API_KEY={GEMINI_KEY}\n"
         f"HERMES_AUXILIARY_PROVIDER={TARGET_PROVIDER}\n"
         f"HERMES_AUXILIARY_MODEL={AUXILIARY_MODEL}\n"
     )
@@ -161,8 +161,8 @@ def configure_hermes():
 provider: {TARGET_PROVIDER}
 model: {TARGET_MODEL}
 base_url: {TARGET_BASE_URL}
-api_key: {GROQ_KEY}
-max_tokens: 1024
+api_key: {GEMINI_KEY}
+max_tokens: 2048
 """
     with open(os.path.join(HERMES_DIR, "profiles", "personal.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)
