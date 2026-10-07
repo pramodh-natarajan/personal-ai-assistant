@@ -76,25 +76,21 @@ def configure_hermes():
     print("[*] Writing Hermes configuration and profile files...", flush=True)
     os.makedirs(os.path.join(HERMES_DIR, "profiles"), exist_ok=True)
     
-    # 1. Sync tracked SOUL.md on every boot
     soul_target = os.path.join(HERMES_DIR, "SOUL.md")
     soul_source = "/app/config/SOUL.md"
     if os.path.exists(soul_source):
         shutil.copy(soul_source, soul_target)
         print("[+] Synced /root/.hermes/SOUL.md from tracked config/SOUL.md.", flush=True)
 
-    # 2. Seed USER.md if not restored from backup
     user_target = os.path.join(HERMES_DIR, "USER.md")
     user_source = "/app/config/USER.md"
     if not os.path.exists(user_target) and os.path.exists(user_source):
         shutil.copy(user_source, user_target)
         print("[+] Seeded /root/.hermes/USER.md from tracked config/USER.md.", flush=True)
 
-    # 3. Sync config.yaml
     if os.path.exists("/app/config/config.yaml"):
         run_cmd(f"cp /app/config/config.yaml {HERMES_DIR}/config.yaml")
         
-    # 4. Write runtime .env and personal.yaml profile
     env_content = (
         f"HERMES_PROVIDER=custom\n"
         f"HERMES_MODEL={TARGET_MODEL}\n"
@@ -113,14 +109,6 @@ max_tokens: 2048
 """
     with open(os.path.join(HERMES_DIR, "profiles", "personal.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)
-
-def reset_signal_ratchet_session():
-    allowed_users = os.environ.get("SIGNAL_ALLOWED_USERS", "").split(",")
-    for user in allowed_users:
-        user = user.strip()
-        if user:
-            print(f"[*] Sending ratchet reset signal to {user} to establish fresh session...", flush=True)
-            run_cmd(f'signal-cli -u "{SIGNAL_ACCOUNT}" send -m "[Bodhi] Encryption session re-established." --end-session "{user}"')
 
 def purge_stale_sessions():
     print("[*] Purging stale thread sessions and SQLite caches...", flush=True)
@@ -158,57 +146,4 @@ def wait_for_signal_daemon():
         except Exception:
             if elapsed % 5 == 0:
                 print(f"[*] Waiting for signal-cli port 8080 ({elapsed}s elapsed)...", flush=True)
-            time.sleep(1)
-    print("[!] Warning: signal-cli daemon socket check timed out after 90 seconds.", flush=True)
-
-def sync_to_github():
-    if not GITHUB_TOKEN or not GITHUB_USER:
-        return
-    print("[*] Syncing Bodhi state snapshot to GitHub...", flush=True)
-    repo_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_USER}/{BACKUP_REPO}.git"
-    archive = os.path.join(BACKUP_DIR, "latest.tar.gz")
-    os.makedirs(BACKUP_DIR, exist_ok=True)
-    
-    try:
-        with tarfile.open(archive, "w:gz") as tar:
-            if os.path.exists(HERMES_DIR):
-                tar.add(HERMES_DIR, arcname=".hermes")
-            if os.path.exists(SIGNAL_DIR):
-                tar.add(SIGNAL_DIR, arcname=".local/share/signal-cli")
-                
-        run_cmd(f"cd {BACKUP_DIR} && git init -b main && git remote add origin {repo_url} || true")
-        run_cmd(f"cd {BACKUP_DIR} && git add latest.tar.gz")
-        run_cmd(f'cd {BACKUP_DIR} && git commit -m "Auto-sync Bodhi state [{time.strftime("%Y-%m-%dT%H:%M:%SZ")}]"')
-        run_cmd(f"cd {BACKUP_DIR} && git push -u origin main --force")
-        print("[+] State push complete.", flush=True)
-    except Exception as e:
-        print(f"[!] State sync error: {e}", flush=True)
-
-def periodic_sync_loop():
-    while True:
-        time.sleep(180)
-        sync_to_github()
-
-def main():
-    bind_health_server_instantly()
-
-    run_cmd('git config --global user.name "Bodhi Assistant"')
-    run_cmd('git config --global user.email "bodhi@render.local"')
-
-    restore_state()
-    configure_hermes()
-    purge_stale_sessions()
-
-    reset_signal_ratchet_session()
-
-    # Background threads stay active under Python supervisor process
-    threading.Thread(target=sync_to_github, daemon=True).start()
-    threading.Thread(target=periodic_sync_loop, daemon=True).start()
-
-    wait_for_signal_daemon()
-
-    print("[+] Launching Hermes Agent Gateway under supervisor process...", flush=True)
-    subprocess.run(["hermes", "gateway"])
-
-if __name__ == "__main__":
-    main()
+            time.sleep
