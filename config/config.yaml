@@ -6,13 +6,13 @@ agent:
 models:
   primary:
     provider: "openrouter"
-    model: "google/gemini-2.0-flash-exp:free"
+    model: "qwen/qwen-2.5-7b-instruct:free"
     api_key: "${OPENROUTER_API_KEY}"
     max_tokens: 2048
     enable_web_search: false
   utility:
     provider: "openrouter"
-    model: "google/gemini-2.0-flash-exp:free"
+    model: "qwen/qwen-2.5-7b-instruct:free"
     api_key: "${OPENROUTER_API_KEY}"
     max_tokens: 1024
   fallback:

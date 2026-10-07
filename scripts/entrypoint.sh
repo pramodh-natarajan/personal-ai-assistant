@@ -6,7 +6,7 @@ SIGNAL_DIR="/root/.local/share/signal-cli"
 BACKUP_DIR="/tmp/bodhi-state"
 REPO_URL="https://${GITHUB_TOKEN}@github.com/${GITHUB_USER}/${BACKUP_REPO:-bodhi-state}.git"
 
-FREE_MODEL="google/gemini-2.0-flash-exp:free"
+FREE_MODEL="qwen/qwen-2.5-7b-instruct:free"
 
 export HERMES_MODEL="${FREE_MODEL}"
 export MODEL="${FREE_MODEL}"
@@ -33,14 +33,13 @@ else
     git remote add origin "${REPO_URL}" || true
 fi
 
-# 2. Patch hardcoded fallback model inside hermes-agent Python package and runtime config
+# 2. Patch hardcoded default models across python site-packages and runtime config
 echo "[*] Patching default model across Hermes package source and runtime..."
 python3 -c "
 import site, os
 
 target = '${FREE_MODEL}'
 
-# Patch site-packages source code defaults
 for sp in site.getsitepackages():
     for root, _, files in os.walk(sp):
         for f in files:
@@ -49,15 +48,14 @@ for sp in site.getsitepackages():
                 try:
                     with open(path, 'r', encoding='utf-8', errors='ignore') as file:
                         content = file.read()
-                    if 'z-ai/glm-5.2' in content or 'glm-5.2' in content:
-                        new_content = content.replace('z-ai/glm-5.2', target).replace('glm-5.2', target)
+                    if 'z-ai/glm-5.2' in content or 'glm-5.2' in content or 'gemini-2.0-flash-exp' in content:
+                        new_content = content.replace('z-ai/glm-5.2', target).replace('glm-5.2', target).replace('google/gemini-2.0-flash-exp:free', target)
                         with open(path, 'w', encoding='utf-8') as file:
                             file.write(new_content)
                         print(f'[+] Patched source file: {path}')
                 except Exception:
                     pass
 
-# Patch /root/.hermes configuration and profiles
 for root, _, files in os.walk('/root/.hermes'):
     for f in files:
         if f.endswith(('.py', '.yaml', '.json', '.txt')):
@@ -65,8 +63,8 @@ for root, _, files in os.walk('/root/.hermes'):
             try:
                 with open(path, 'r', encoding='utf-8', errors='ignore') as file:
                     content = file.read()
-                if 'z-ai/glm-5.2' in content or 'glm-5.2' in content or 'llama-3.3-70b-instruct' in content:
-                    new_content = content.replace('z-ai/glm-5.2', target).replace('glm-5.2', target).replace('meta-llama/llama-3.3-70b-instruct:free', target)
+                if 'z-ai/glm-5.2' in content or 'glm-5.2' in content or 'gemini-2.0-flash-exp' in content:
+                    new_content = content.replace('z-ai/glm-5.2', target).replace('glm-5.2', target).replace('google/gemini-2.0-flash-exp:free', target)
                     with open(path, 'w', encoding='utf-8') as file:
                         file.write(new_content)
                     print(f'[+] Patched config file: {path}')

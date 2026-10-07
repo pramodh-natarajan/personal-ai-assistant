@@ -18,9 +18,9 @@ services:
       - key: SIGNAL_HTTP_URL
         value: "http://127.0.0.1:8080"
       - key: HERMES_MODEL
-        value: "google/gemini-2.0-flash-exp:free"
+        value: "qwen/qwen-2.5-7b-instruct:free"
       - key: OPENROUTER_MODEL
-        value: "google/gemini-2.0-flash-exp:free"
+        value: "qwen/qwen-2.5-7b-instruct:free"
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_USER
