@@ -22,7 +22,7 @@ GITHUB_USER = os.environ.get("GITHUB_USER", "")
 BACKUP_REPO = os.environ.get("BACKUP_REPO", "bodhi-state")
 SIGNAL_ACCOUNT = os.environ.get("SIGNAL_ACCOUNT", "")
 
-# Remove OpenRouter API key from environment to prevent auto-discovery overrides
+# Disable OpenRouter auto-discovery overrides
 os.environ.pop("OPENROUTER_API_KEY", None)
 
 def run_cmd(cmd, check=False):
@@ -46,7 +46,7 @@ def restore_state():
                 tar.extractall(path="/root")
             print("[+] Memory and Signal session successfully restored.")
         except Exception as e:
-            print(f"[!] Note on tarball restoration: {e}")
+            print(f"[!] Tarball restore note: {e}")
     else:
         print("[!] No backup repository found. Initializing clean slate.")
 
@@ -54,11 +54,9 @@ def configure_hermes():
     print("[*] Writing Hermes configuration and profile files...")
     os.makedirs(os.path.join(HERMES_DIR, "profiles"), exist_ok=True)
     
-    # 1. Copy config.yaml from repository
     if os.path.exists("/app/config/config.yaml"):
         run_cmd(f"cp /app/config/config.yaml {HERMES_DIR}/config.yaml")
         
-    # 2. Write /root/.hermes/.env
     env_content = (
         f"HERMES_PROVIDER=custom\n"
         f"HERMES_MODEL={TARGET_MODEL}\n"
@@ -68,7 +66,6 @@ def configure_hermes():
     with open(os.path.join(HERMES_DIR, ".env"), "w", encoding="utf-8") as f:
         f.write(env_content)
         
-    # 3. Write personal profile
     profile_content = f"""name: personal
 model: {TARGET_MODEL}
 provider: custom
@@ -80,8 +77,7 @@ max_tokens: 2048
         f.write(profile_content)
 
 def sanitize_state_files():
-    print("[*] Updating restored session threads and SQLite state...")
-    # Clean JSON session files
+    print("[*] Sanitizing session threads and SQLite state...")
     for root, _, files in os.walk(HERMES_DIR):
         for f in files:
             if f.endswith(".json"):
@@ -103,7 +99,6 @@ def sanitize_state_files():
                 except Exception:
                     pass
 
-    # Clean SQLite databases safely
     for root, _, files in os.walk(HERMES_DIR):
         for f in files:
             if f.endswith((".db", ".sqlite", ".sqlite3")):
@@ -119,4 +114,71 @@ def sanitize_state_files():
                         if "model" in cols:
                             cur.execute(f"UPDATE {table} SET model = ?;", (TARGET_MODEL,))
                         if "provider" in cols:
-                            cur.execute(f"UPDATE {table
+                            cur.execute(f"UPDATE {table} SET provider = ?;", ("custom",))
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    pass
+
+def sync_to_github():
+    if not GITHUB_TOKEN or not GITHUB_USER:
+        return
+    print("[*] Syncing Bodhi state snapshot to GitHub...")
+    repo_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_USER}/{BACKUP_REPO}.git"
+    archive = os.path.join(BACKUP_DIR, "latest.tar.gz")
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    
+    try:
+        with tarfile.open(archive, "w:gz") as tar:
+            if os.path.exists(HERMES_DIR):
+                tar.add(HERMES_DIR, arcname=".hermes")
+            if os.path.exists(SIGNAL_DIR):
+                tar.add(SIGNAL_DIR, arcname=".local/share/signal-cli")
+                
+        run_cmd(f"cd {BACKUP_DIR} && git init -b main && git remote add origin {repo_url} || true")
+        run_cmd(f"cd {BACKUP_DIR} && git add latest.tar.gz")
+        run_cmd(f'cd {BACKUP_DIR} && git commit -m "Auto-sync Bodhi state [{time.strftime("%Y-%m-%dT%H:%M:%SZ")}]"')
+        run_cmd(f"cd {BACKUP_DIR} && git push -u origin main --force")
+        print("[+] State push complete.")
+    except Exception as e:
+        print(f"[!] State sync error: {e}")
+
+def periodic_sync_loop():
+    while True:
+        time.sleep(600)
+        sync_to_github()
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    class HealthHandler(SimpleHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Bodhi Gateway Healthy")
+        def log_message(self, format, *args):
+            return
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
+
+def main():
+    run_cmd('git config --global user.name "Bodhi Assistant"')
+    run_cmd('git config --global user.email "bodhi@render.local"')
+
+    restore_state()
+    configure_hermes()
+    sanitize_state_files()
+
+    threading.Thread(target=periodic_sync_loop, daemon=True).start()
+    threading.Thread(target=start_health_server, daemon=True).start()
+
+    if SIGNAL_ACCOUNT:
+        print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...")
+        subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
+        time.sleep(4)
+
+    print("[+] Launching Hermes Agent Gateway...")
+    os.execvp("hermes", ["hermes", "gateway"])
+
+if __name__ == "__main__":
+    main()
