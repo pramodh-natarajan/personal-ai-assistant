@@ -9,6 +9,7 @@ import glob
 import tarfile
 import subprocess
 import threading
+import urllib.request
 import traceback
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
@@ -94,7 +95,6 @@ def restore_state():
         print("[!] GITHUB_TOKEN or GITHUB_USER missing. Skipping state restoration.", flush=True)
 
 def safe_cleanup_state():
-    """Removes temporary or cache lockfiles without touching SQLite state.db, profiles, or session histories."""
     print("[*] Cleaning up stale lock files...", flush=True)
     for lock_file in glob.glob(os.path.join(HERMES_DIR, "*.lock")):
         try:
@@ -174,13 +174,20 @@ def start_signal_daemon():
     global signal_process
     if not SIGNAL_ACCOUNT:
         print("[!] SIGNAL_ACCOUNT environment variable not set. Skipping signal-cli daemon.", flush=True)
-        return
+        return False
 
     run_cmd("pkill -9 -f signal-cli || true")
     time.sleep(1)
 
-    print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...", flush=True)
-    signal_process = subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
+    print(f"[+] Starting signal-cli daemon (trust-new-identities=always) for account {SIGNAL_ACCOUNT}...", flush=True)
+    signal_cmd = [
+        "signal-cli",
+        "--account", SIGNAL_ACCOUNT,
+        "--trust-new-identities", "always",
+        "daemon",
+        "--http", "127.0.0.1:8080"
+    ]
+    signal_process = subprocess.Popen(signal_cmd)
     
     for elapsed in range(1, 91):
         try:
@@ -194,15 +201,44 @@ def start_signal_daemon():
     return False
 
 def signal_supervisor_loop():
-    """Monitors signal-cli socket on port 8080 every 15 seconds and restarts it if socket drops."""
+    """Recycles signal-cli connection periodically or when HTTP health checks fail to prevent silent WebSocket disconnects."""
+    consecutive_failures = 0
+    cycle_counter = 0
+
     while True:
-        time.sleep(15)
+        time.sleep(30)
+        cycle_counter += 1
+
+        # Check HTTP health
+        is_healthy = False
         try:
-            with socket.create_connection(("127.0.0.1", 8080), timeout=2):
-                pass
+            req = urllib.request.Request("http://127.0.0.1:8080/v1/health")
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status in (200, 204, 404):
+                    is_healthy = True
         except Exception:
-            print("[!] Signal daemon TCP socket check failed. Restarting signal-cli...", flush=True)
+            # Check standard TCP socket as secondary fallback
+            try:
+                with socket.create_connection(("127.0.0.1", 8080), timeout=2):
+                    is_healthy = True
+            except Exception:
+                is_healthy = False
+
+        if not is_healthy:
+            consecutive_failures += 1
+            print(f"[!] Signal daemon HTTP check failed ({consecutive_failures}/3).", flush=True)
+            if consecutive_failures >= 3:
+                print("[!] Signal daemon unresponsive. Restarting signal-cli...", flush=True)
+                start_signal_daemon()
+                consecutive_failures = 0
+        else:
+            consecutive_failures = 0
+
+        # Proactive recycling every 4 hours (480 cycles of 30s) to keep Signal WebSocket refreshed
+        if cycle_counter >= 480:
+            print("[*] Proactively refreshing signal-cli WebSocket connection to prevent idle timeout...", flush=True)
             start_signal_daemon()
+            cycle_counter = 0
 
 def sync_to_github():
     if not GITHUB_TOKEN or not GITHUB_USER:
