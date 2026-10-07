@@ -29,13 +29,14 @@ GITHUB_USER = os.environ.get("GITHUB_USER", "")
 BACKUP_REPO = os.environ.get("BACKUP_REPO", "bodhi-state")
 SIGNAL_ACCOUNT = os.environ.get("SIGNAL_ACCOUNT", "")
 
-# Disable OpenRouter environment variables
+# Unset OpenRouter environment variables entirely
 os.environ.pop("OPENROUTER_API_KEY", None)
 os.environ["HERMES_PROVIDER"] = TARGET_PROVIDER
 os.environ["HERMES_MODEL"] = TARGET_MODEL
 os.environ["HERMES_AUXILIARY_PROVIDER"] = TARGET_PROVIDER
 os.environ["HERMES_AUXILIARY_MODEL"] = AUXILIARY_MODEL
 os.environ["GROQ_API_KEY"] = GROQ_KEY
+os.environ["OPENAI_API_KEY"] = GROQ_KEY
 
 def bind_health_server_instantly():
     port = int(os.environ.get("PORT", 10000))
@@ -118,11 +119,20 @@ def configure_hermes():
         shutil.copy(user_source, user_target)
         print("[+] Seeded /root/.hermes/USER.md from tracked config/USER.md.", flush=True)
 
-    # 2. Copy config.yaml
-    if os.path.exists("/app/config/config.yaml"):
-        run_cmd(f"cp /app/config/config.yaml {HERMES_DIR}/config.yaml")
+    # 2. Expand env vars in config.yaml directly
+    config_source = "/app/config/config.yaml"
+    config_target = os.path.join(HERMES_DIR, "config.yaml")
+    if os.path.exists(config_source):
+        with open(config_source, "r", encoding="utf-8") as f:
+            cfg_str = f.read()
+        for k, v in os.environ.items():
+            cfg_str = cfg_str.replace(f"${{{k}}}", v)
+            cfg_str = cfg_str.replace(f"${k}", v)
+        with open(config_target, "w", encoding="utf-8") as f:
+            f.write(cfg_str)
+        print("[+] Expanded environment variables in /root/.hermes/config.yaml.", flush=True)
 
-    # 3. Explicitly write /root/.hermes/model.json with Groq provider
+    # 3. Explicitly write /root/.hermes/model.json
     model_json_path = os.path.join(HERMES_DIR, "model.json")
     model_data = {
         "provider": TARGET_PROVIDER,
@@ -139,13 +149,14 @@ def configure_hermes():
         f"HERMES_PROVIDER={TARGET_PROVIDER}\n"
         f"HERMES_MODEL={TARGET_MODEL}\n"
         f"GROQ_API_KEY={GROQ_KEY}\n"
+        f"OPENAI_API_KEY={GROQ_KEY}\n"
         f"HERMES_AUXILIARY_PROVIDER={TARGET_PROVIDER}\n"
         f"HERMES_AUXILIARY_MODEL={AUXILIARY_MODEL}\n"
     )
     with open(os.path.join(HERMES_DIR, ".env"), "w", encoding="utf-8") as f:
         f.write(env_content)
         
-    # 5. Write profiles
+    # 5. Write profiles with actual key string
     profile_content = f"""name: personal
 model: {TARGET_MODEL}
 provider: {TARGET_PROVIDER}
