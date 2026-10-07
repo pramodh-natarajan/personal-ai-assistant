@@ -3,36 +3,43 @@ agent:
   default_profile: "personal"
   generate_titles: false
 
+# Hermes requires this singular `model` block (not `models:`).
+model:
+  provider: "custom"
+  default: "llama-3.3-70b-versatile"
+  base_url: "https://api.groq.com/openai/v1"
+  api_key: "${GROQ_API_KEY}"
+  max_tokens: 2048
+
+# Must be a YAML list (each item prefixed with '-'), not a mapping.
 custom_providers:
-  custom:
+  - name: groq
+    base_url: "https://api.groq.com/openai/v1"
+    api_key: "${GROQ_API_KEY}"
+    model: "llama-3.3-70b-versatile"
+
+auxiliary:
+  compression:
+    provider: "custom"
+    model: "llama-3.1-8b-instant"
+    base_url: "https://api.groq.com/openai/v1"
+    api_key: "${GROQ_API_KEY}"
+  title_generation:
+    provider: "custom"
+    model: "llama-3.1-8b-instant"
+    base_url: "https://api.groq.com/openai/v1"
+    api_key: "${GROQ_API_KEY}"
+  curator:
+    provider: "custom"
+    model: "llama-3.1-8b-instant"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
 
-models:
-  primary:
-    provider: "custom"
-    model: "llama-3.3-70b-versatile"
-    base_url: "https://api.groq.com/openai/v1"
-    api_key: "${GROQ_API_KEY}"
-    max_tokens: 2048
-  utility:
-    provider: "custom"
+fallback_providers:
+  - provider: "custom"
     model: "llama-3.1-8b-instant"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
-    max_tokens: 1024
-  auxiliary:
-    provider: "custom"
-    model: "llama-3.1-8b-instant"
-    base_url: "https://api.groq.com/openai/v1"
-    api_key: "${GROQ_API_KEY}"
-    max_tokens: 1024
-  fallback:
-    provider: "custom"
-    model: "llama-3.1-8b-instant"
-    base_url: "https://api.groq.com/openai/v1"
-    api_key: "${GROQ_API_KEY}"
-    max_tokens: 1024
 
 memory:
   memory_enabled: true

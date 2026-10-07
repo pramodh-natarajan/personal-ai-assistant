@@ -6,6 +6,7 @@ This repository features automatic state restoration and remote persistence via 
 
 ## **System Architecture**
 
+```
 ┌────────────────────────────────────────────────────────────────────────┐  
 │ Render Free Container (Debian Bookworm \+ Docker)                        │  
 │                                                                        │  
@@ -28,6 +29,7 @@ This repository features automatic state restoration and remote persistence via 
     Syncs snapshot every 3 mins  
                ▼  
    GitHub Repository (bodhi-state / latest.tar.gz)
+```
 
 ## **Prerequisites**
 
@@ -117,65 +119,12 @@ The main repository (personal-ai-assistant) contains tracked configuration templ
 
 ### **config/config.yaml**
 
-YAML  
-agent:  
-  name: "Bodhi"  
-  default\_profile: "personal"  
-  generate\_titles: false
+Hermes validates two required shapes here:
 
-custom\_providers:  
-  custom:  
-    base\_url: "https\://api.groq.com/openai/v1"  
-    api\_key: "\${GROQ\_API\_KEY}"
+- `model:` (singular) — which provider and model id to use
+- `custom_providers:` as a **YAML list** (`- name:` …), not a mapping
 
-models:  
-  primary:  
-    provider: "custom"  
-    model: "llama-3.3-70b-versatile"  
-    base\_url: "https\://api.groq.com/openai/v1"  
-    api\_key: "\${GROQ\_API\_KEY}"  
-    max\_tokens: 2048  
-  utility:  
-    provider: "custom"  
-    model: "llama-3.1-8b-instant"  
-    base\_url: "https\://api.groq.com/openai/v1"  
-    api\_key: "\${GROQ\_API\_KEY}"  
-    max\_tokens: 1024  
-  auxiliary:  
-    provider: "custom"  
-    model: "llama-3.1-8b-instant"  
-    base\_url: "https\://api.groq.com/openai/v1"  
-    api\_key: "\${GROQ\_API\_KEY}"  
-    max\_tokens: 1024  
-  fallback:  
-    provider: "custom"  
-    model: "llama-3.1-8b-instant"  
-    base\_url: "https\://api.groq.com/openai/v1"  
-    api\_key: "\${GROQ\_API\_KEY}"  
-    max\_tokens: 1024
-
-memory:  
-  memory\_enabled: true  
-  user\_profile\_enabled: true  
-  memory\_char\_limit: 3000  
-  user\_char\_limit: 2000  
-  write\_approval: false
-
-curator:  
-  enabled: true  
-  interval\_hours: 168  
-  consolidate: true
-
-gateway:  
-  signal:  
-    enabled: true  
-    http\_url: "\${SIGNAL\_HTTP\_URL:-http\://127.0.0.1:8080}"  
-    account: "\${SIGNAL\_ACCOUNT}"  
-    allowed\_users:  
-      \- "\${SIGNAL\_ALLOWED\_USERS}"  
-  cli:  
-    enabled: true  
-    unified\_session: true
+See `config/config.yaml` for the live file. Groq is the custom endpoint; primary model is `llama-3.3-70b-versatile`, with `llama-3.1-8b-instant` for auxiliary work and fallback.
 
 ### **config/SOUL.md (Agent Directive)**
 
