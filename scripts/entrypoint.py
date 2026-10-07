@@ -21,7 +21,7 @@ BACKUP_DIR = "/tmp/bodhi-state"
 
 TARGET_MODEL = "llama-3.3-70b-versatile"
 AUXILIARY_MODEL = "llama-3.1-8b-instant"
-TARGET_BASE_URL = "https://api.groq.com/openai/v1"
+TARGET_PROVIDER = "groq"
 
 GROQ_KEY = os.environ.get("GROQ_API_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
@@ -29,15 +29,13 @@ GITHUB_USER = os.environ.get("GITHUB_USER", "")
 BACKUP_REPO = os.environ.get("BACKUP_REPO", "bodhi-state")
 SIGNAL_ACCOUNT = os.environ.get("SIGNAL_ACCOUNT", "")
 
-# Unset OpenRouter environment variables entirely
+# Disable OpenRouter environment variables
 os.environ.pop("OPENROUTER_API_KEY", None)
-os.environ["HERMES_PROVIDER"] = "custom"
+os.environ["HERMES_PROVIDER"] = TARGET_PROVIDER
 os.environ["HERMES_MODEL"] = TARGET_MODEL
-os.environ["OPENAI_BASE_URL"] = TARGET_BASE_URL
-os.environ["OPENAI_API_KEY"] = GROQ_KEY
-os.environ["GROQ_API_KEY"] = GROQ_KEY
-os.environ["HERMES_AUXILIARY_PROVIDER"] = "custom"
+os.environ["HERMES_AUXILIARY_PROVIDER"] = TARGET_PROVIDER
 os.environ["HERMES_AUXILIARY_MODEL"] = AUXILIARY_MODEL
+os.environ["GROQ_API_KEY"] = GROQ_KEY
 
 def bind_health_server_instantly():
     port = int(os.environ.get("PORT", 10000))
@@ -85,6 +83,24 @@ def restore_state():
     else:
         print("[!] GITHUB_TOKEN or GITHUB_USER missing. Skipping state restoration.", flush=True)
 
+def purge_legacy_state():
+    print("[*] Purging legacy session threads, databases, and OpenRouter config caches...", flush=True)
+    protected_files = {"SOUL.md", "USER.md"}
+    for root, dirs, files in os.walk(HERMES_DIR, topdown=False):
+        for f in files:
+            if f not in protected_files:
+                filepath = os.path.join(root, f)
+                try:
+                    os.remove(filepath)
+                except Exception:
+                    pass
+        for d in dirs:
+            dirpath = os.path.join(root, d)
+            try:
+                shutil.rmtree(dirpath, ignore_errors=True)
+            except Exception:
+                pass
+
 def configure_hermes():
     print("[*] Writing Hermes configuration, profiles, and model.json...", flush=True)
     os.makedirs(os.path.join(HERMES_DIR, "profiles"), exist_ok=True)
@@ -106,14 +122,13 @@ def configure_hermes():
     if os.path.exists("/app/config/config.yaml"):
         run_cmd(f"cp /app/config/config.yaml {HERMES_DIR}/config.yaml")
 
-    # 3. Explicitly overwrite /root/.hermes/model.json to force Groq for primary & auxiliary
+    # 3. Explicitly write /root/.hermes/model.json with Groq provider
     model_json_path = os.path.join(HERMES_DIR, "model.json")
     model_data = {
-        "provider": "custom",
+        "provider": TARGET_PROVIDER,
         "model": TARGET_MODEL,
-        "base_url": TARGET_BASE_URL,
         "api_key": GROQ_KEY,
-        "auxiliary_provider": "custom",
+        "auxiliary_provider": TARGET_PROVIDER,
         "auxiliary_model": AUXILIARY_MODEL
     }
     with open(model_json_path, "w", encoding="utf-8") as f:
@@ -121,12 +136,10 @@ def configure_hermes():
 
     # 4. Write runtime .env file
     env_content = (
-        f"HERMES_PROVIDER=custom\n"
+        f"HERMES_PROVIDER={TARGET_PROVIDER}\n"
         f"HERMES_MODEL={TARGET_MODEL}\n"
-        f"OPENAI_BASE_URL={TARGET_BASE_URL}\n"
-        f"OPENAI_API_KEY={GROQ_KEY}\n"
         f"GROQ_API_KEY={GROQ_KEY}\n"
-        f"HERMES_AUXILIARY_PROVIDER=custom\n"
+        f"HERMES_AUXILIARY_PROVIDER={TARGET_PROVIDER}\n"
         f"HERMES_AUXILIARY_MODEL={AUXILIARY_MODEL}\n"
     )
     with open(os.path.join(HERMES_DIR, ".env"), "w", encoding="utf-8") as f:
@@ -135,8 +148,7 @@ def configure_hermes():
     # 5. Write profiles
     profile_content = f"""name: personal
 model: {TARGET_MODEL}
-provider: custom
-base_url: {TARGET_BASE_URL}
+provider: {TARGET_PROVIDER}
 api_key: {GROQ_KEY}
 max_tokens: 2048
 """
@@ -144,28 +156,6 @@ max_tokens: 2048
         f.write(profile_content)
     with open(os.path.join(HERMES_DIR, "profiles", "default.yaml"), "w", encoding="utf-8") as f:
         f.write(profile_content)
-
-def purge_stale_sessions():
-    print("[*] Recursively purging stale thread state and legacy OpenRouter JSON files...", flush=True)
-    for root, dirs, files in os.walk(HERMES_DIR):
-        for d in list(dirs):
-            if d in ["sessions", "threads", "cache", "db", "state", "history"]:
-                shutil.rmtree(os.path.join(root, d), ignore_errors=True)
-        for f in files:
-            filepath = os.path.join(root, f)
-            if f.endswith((".db", ".db-journal", ".db-wal", ".db-shm", ".sqlite", ".sqlite3")):
-                try:
-                    os.remove(filepath)
-                except Exception:
-                    pass
-            elif f.endswith(".json") and f != "model.json":
-                try:
-                    with open(filepath, "r", encoding="utf-8") as jf:
-                        content = jf.read()
-                    if "openrouter" in content or "glm-5.2" in content:
-                        os.remove(filepath)
-                except Exception:
-                    pass
 
 def wait_for_signal_daemon():
     if not SIGNAL_ACCOUNT:
@@ -237,8 +227,8 @@ def main():
         run_cmd('git config --global user.email "bodhi@render.local"')
 
         restore_state()
+        purge_legacy_state()
         configure_hermes()
-        purge_stale_sessions()
 
         threading.Thread(target=periodic_sync_loop, daemon=True).start()
 

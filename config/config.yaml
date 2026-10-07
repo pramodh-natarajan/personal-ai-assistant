@@ -5,26 +5,22 @@ agent:
 
 models:
   primary:
-    provider: "custom"
-    base_url: "https://api.groq.com/openai/v1"
+    provider: "groq"
     model: "llama-3.3-70b-versatile"
     api_key: "${GROQ_API_KEY}"
     max_tokens: 2048
   utility:
-    provider: "custom"
-    base_url: "https://api.groq.com/openai/v1"
+    provider: "groq"
     model: "llama-3.1-8b-instant"
     api_key: "${GROQ_API_KEY}"
     max_tokens: 1024
   auxiliary:
-    provider: "custom"
-    base_url: "https://api.groq.com/openai/v1"
+    provider: "groq"
     model: "llama-3.1-8b-instant"
     api_key: "${GROQ_API_KEY}"
     max_tokens: 1024
   fallback:
-    provider: "custom"
-    base_url: "https://api.groq.com/openai/v1"
+    provider: "groq"
     model: "llama-3.1-8b-instant"
     api_key: "${GROQ_API_KEY}"
     max_tokens: 1024
