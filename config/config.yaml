@@ -3,7 +3,7 @@ agent:
   default_profile: "personal"
   generate_titles: false
 
-# Hermes primary model block
+# Hermes model block — max_tokens capped to fit Groq 8000 TPM limit
 model:
   provider: "custom"
   default: "openai/gpt-oss-120b"
@@ -23,43 +23,32 @@ auxiliary:
     model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
+    max_tokens: 512
   title_generation:
     provider: "custom"
     model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
+    max_tokens: 512
   curator:
     provider: "custom"
     model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
+    max_tokens: 512
 
 fallback_providers:
   - provider: "custom"
     model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
-
-# Disables unused tool schemas to prevent Groq HTTP 413 TPM payload errors
-tools:
-  disabled:
-    - "browser"
-    - "browser_cdp"
-    - "browser_dialog"
-    - "browser_vision"
-    - "close_terminal"
-    - "computer_use"
-    - "image_generation"
-    - "kanban"
-    - "kanban_orchestrator"
-    - "read_terminal"
-    - "vision"
+    max_tokens: 512
 
 memory:
   memory_enabled: true
   user_profile_enabled: true
-  memory_char_limit: 2000
-  user_char_limit: 1500
+  memory_char_limit: 1500
+  user_char_limit: 1000
   write_approval: false
 
 curator:
