@@ -30,8 +30,8 @@ else
     git remote add origin "${REPO_URL}" || true
 fi
 
-# 2. Patch hardcoded openrouter defaults across python site-packages and runtime config
-echo "[*] Purging OpenRouter references and enforcing Groq provider..."
+# 2. Patch legacy provider references and enforce api.groq.com base_url
+echo "[*] Enforcing Groq API endpoint (https://api.groq.com/openai/v1)..."
 python3 -c "
 import site, os
 
@@ -43,8 +43,8 @@ for sp in site.getsitepackages():
                 try:
                     with open(path, 'r', encoding='utf-8', errors='ignore') as file:
                         content = file.read()
-                    if 'openrouter' in content or 'z-ai/glm-5.2' in content:
-                        new_content = content.replace('z-ai/glm-5.2', 'llama-3.3-70b-versatile').replace('openrouter', 'groq')
+                    if 'groq.ai' in content:
+                        new_content = content.replace('groq.ai', 'api.groq.com/openai')
                         with open(path, 'w', encoding='utf-8') as file:
                             file.write(new_content)
                 except Exception:
@@ -54,14 +54,15 @@ for sp in site.getsitepackages():
 # 3. Purge legacy thread sessions and profile caches
 rm -rf /root/.hermes/sessions /root/.hermes/threads /root/.hermes/profiles /root/.hermes/cache /root/.hermes/*.db* /root/.hermes/*.sqlite* 2>/dev/null || true
 
-# 4. Re-initialize clean config and personal profile for Groq
+# 4. Re-initialize clean config and personal profile pointing explicitly to api.groq.com
 mkdir -p /root/.hermes/profiles
 cp /app/config/config.yaml /root/.hermes/config.yaml
 
 cat <<EOF > /root/.hermes/profiles/personal.yaml
 name: personal
 model: llama-3.3-70b-versatile
-provider: groq
+provider: custom
+base_url: https://api.groq.com/openai/v1
 api_key: ${GROQ_API_KEY}
 max_tokens: 2048
 EOF
