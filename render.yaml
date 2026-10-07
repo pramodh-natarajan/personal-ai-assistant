@@ -9,7 +9,7 @@ services:
     envVars:
       - key: PORT
         value: 10000
-      - key: OPENROUTER_API_KEY
+      - key: GROQ_API_KEY
         sync: false
       - key: SIGNAL_ACCOUNT
         sync: false
@@ -18,9 +18,9 @@ services:
       - key: SIGNAL_HTTP_URL
         value: "http://127.0.0.1:8080"
       - key: HERMES_MODEL
-        value: "qwen/qwen-2.5-7b-instruct:free"
-      - key: OPENROUTER_MODEL
-        value: "qwen/qwen-2.5-7b-instruct:free"
+        value: "llama-3.3-70b-versatile"
+      - key: HERMES_PROVIDER
+        value: "groq"
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_USER

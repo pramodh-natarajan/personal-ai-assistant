@@ -6,11 +6,8 @@ SIGNAL_DIR="/root/.local/share/signal-cli"
 BACKUP_DIR="/tmp/bodhi-state"
 REPO_URL="https://${GITHUB_TOKEN}@github.com/${GITHUB_USER}/${BACKUP_REPO:-bodhi-state}.git"
 
-FREE_MODEL="qwen/qwen-2.5-7b-instruct:free"
-
-export HERMES_MODEL="${FREE_MODEL}"
-export MODEL="${FREE_MODEL}"
-export OPENROUTER_MODEL="${FREE_MODEL}"
+export HERMES_MODEL="llama-3.3-70b-versatile"
+export MODEL="llama-3.3-70b-versatile"
 
 mkdir -p "${HERMES_DIR}" "${SIGNAL_DIR}"
 
@@ -33,12 +30,10 @@ else
     git remote add origin "${REPO_URL}" || true
 fi
 
-# 2. Patch hardcoded default models across python site-packages and runtime config
-echo "[*] Patching default model across Hermes package source and runtime..."
+# 2. Patch hardcoded openrouter defaults across python site-packages and runtime config
+echo "[*] Purging OpenRouter references and enforcing Groq provider..."
 python3 -c "
 import site, os
-
-target = '${FREE_MODEL}'
 
 for sp in site.getsitepackages():
     for root, _, files in os.walk(sp):
@@ -48,42 +43,26 @@ for sp in site.getsitepackages():
                 try:
                     with open(path, 'r', encoding='utf-8', errors='ignore') as file:
                         content = file.read()
-                    if 'z-ai/glm-5.2' in content or 'glm-5.2' in content or 'gemini-2.0-flash-exp' in content:
-                        new_content = content.replace('z-ai/glm-5.2', target).replace('glm-5.2', target).replace('google/gemini-2.0-flash-exp:free', target)
+                    if 'openrouter' in content or 'z-ai/glm-5.2' in content:
+                        new_content = content.replace('z-ai/glm-5.2', 'llama-3.3-70b-versatile').replace('openrouter', 'groq')
                         with open(path, 'w', encoding='utf-8') as file:
                             file.write(new_content)
-                        print(f'[+] Patched source file: {path}')
                 except Exception:
                     pass
-
-for root, _, files in os.walk('/root/.hermes'):
-    for f in files:
-        if f.endswith(('.py', '.yaml', '.json', '.txt')):
-            path = os.path.join(root, f)
-            try:
-                with open(path, 'r', encoding='utf-8', errors='ignore') as file:
-                    content = file.read()
-                if 'z-ai/glm-5.2' in content or 'glm-5.2' in content or 'gemini-2.0-flash-exp' in content:
-                    new_content = content.replace('z-ai/glm-5.2', target).replace('glm-5.2', target).replace('google/gemini-2.0-flash-exp:free', target)
-                    with open(path, 'w', encoding='utf-8') as file:
-                        file.write(new_content)
-                    print(f'[+] Patched config file: {path}')
-            except Exception:
-                pass
 "
 
 # 3. Purge legacy thread sessions and profile caches
 rm -rf /root/.hermes/sessions /root/.hermes/threads /root/.hermes/profiles /root/.hermes/cache /root/.hermes/*.db* /root/.hermes/*.sqlite* 2>/dev/null || true
 
-# 4. Re-initialize clean config and personal profile
+# 4. Re-initialize clean config and personal profile for Groq
 mkdir -p /root/.hermes/profiles
 cp /app/config/config.yaml /root/.hermes/config.yaml
 
 cat <<EOF > /root/.hermes/profiles/personal.yaml
 name: personal
-model: ${FREE_MODEL}
-provider: openrouter
-api_key: ${OPENROUTER_API_KEY}
+model: llama-3.3-70b-versatile
+provider: groq
+api_key: ${GROQ_API_KEY}
 max_tokens: 2048
 EOF
 
