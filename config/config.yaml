@@ -3,10 +3,10 @@ agent:
   default_profile: "personal"
   generate_titles: false
 
-# Active Groq model configuration using supported endpoints
+# Hermes primary model block
 model:
   provider: "custom"
-  default: "llama3-70b-8192"
+  default: "openai/gpt-oss-120b"
   base_url: "https://api.groq.com/openai/v1"
   api_key: "${GROQ_API_KEY}"
   max_tokens: 1024
@@ -15,32 +15,32 @@ custom_providers:
   - name: groq
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
-    model: "llama3-70b-8192"
+    model: "openai/gpt-oss-120b"
 
 auxiliary:
   compression:
     provider: "custom"
-    model: "llama3-8b-8192"
+    model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
   title_generation:
     provider: "custom"
-    model: "llama3-8b-8192"
+    model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
   curator:
     provider: "custom"
-    model: "llama3-8b-8192"
+    model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
 
 fallback_providers:
   - provider: "custom"
-    model: "llama3-8b-8192"
+    model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     api_key: "${GROQ_API_KEY}"
 
-# Disables unused tool schemas that inflate system prompt token count
+# Disables unused tool schemas to prevent Groq HTTP 413 TPM payload errors
 tools:
   disabled:
     - "browser"

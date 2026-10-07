@@ -19,8 +19,8 @@ HERMES_DIR = "/root/.hermes"
 SIGNAL_DIR = "/root/.local/share/signal-cli"
 BACKUP_DIR = "/tmp/bodhi-state"
 
-TARGET_MODEL = "llama3-70b-8192"
-AUXILIARY_MODEL = "llama3-8b-8192"
+TARGET_MODEL = "openai/gpt-oss-120b"
+AUXILIARY_MODEL = "openai/gpt-oss-20b"
 TARGET_PROVIDER = "custom"
 TARGET_BASE_URL = "https://api.groq.com/openai/v1"
 
@@ -217,7 +217,8 @@ def sync_to_github():
 
 def periodic_sync_loop():
     while True:
-        time.sleep(180)
+        # Sleep for 4 hours (14,400 seconds) between background GitHub state pushes
+        time.sleep(14400)
         sync_to_github()
 
 def run_hermes_supervisor():
