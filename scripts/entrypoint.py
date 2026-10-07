@@ -3,11 +3,11 @@ import os
 import sys
 import time
 import shutil
+import socket
 import glob
 import tarfile
 import subprocess
 import threading
-import urllib.request
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 HERMES_DIR = "/root/.hermes"
@@ -81,7 +81,7 @@ max_tokens: 2048
         f.write(profile_content)
 
 def purge_stale_sessions():
-    print("[*] Purging stale sessions and caches to prevent schema conflicts...")
+    print("[*] Purging stale thread sessions and SQLite caches...")
     stale_paths = [
         os.path.join(HERMES_DIR, "sessions"),
         os.path.join(HERMES_DIR, "threads"),
@@ -103,16 +103,15 @@ def wait_for_signal_daemon():
     print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...")
     subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
     
-    print("[*] Waiting for signal-cli daemon to become healthy on http://127.0.0.1:8080...")
-    for _ in range(15):
+    print("[*] Polling 127.0.0.1:8080 until signal-cli socket opens...")
+    for _ in range(20):
         try:
-            with urllib.request.urlopen("http://127.0.0.1:8080/v1/about", timeout=2) as response:
-                if response.status == 200:
-                    print("[+] signal-cli daemon connected successfully!")
-                    return
+            with socket.create_connection(("127.0.0.1", 8080), timeout=2):
+                print("[+] signal-cli daemon port 8080 connected!")
+                return
         except Exception:
             time.sleep(1)
-    print("[!] Warning: signal-cli daemon did not respond within 15 seconds. Proceeding...")
+    print("[!] Warning: signal-cli daemon socket did not respond within 20 seconds.")
 
 def sync_to_github():
     if not GITHUB_TOKEN or not GITHUB_USER:

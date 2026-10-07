@@ -9,16 +9,16 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install OpenJDK 21 JRE from Adoptium binaries
-RUN curl -fsSL -o /tmp/openjdk.tar.gz https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.2%2B13/OpenJDK21U-jre_x64_linux_hotspot_21.0.2_13.tar.gz \
-    && mkdir -p /usr/lib/jvm/openjdk-21 \
-    && tar -xzf /tmp/openjdk.tar.gz -C /usr/lib/jvm/openjdk-21 --strip-components=1 \
-    && rm /tmp/openjdk.tar.gz
+# Install Oracle OpenJDK 25 (Java class version 69.0 required by signal-cli v0.14.8)
+RUN curl -fsSL -o /tmp/openjdk25.tar.gz https://download.oracle.com/java/25/archive/jdk-25.0.2_linux-x64_bin.tar.gz \
+    && mkdir -p /usr/lib/jvm/openjdk-25 \
+    && tar -xzf /tmp/openjdk25.tar.gz -C /usr/lib/jvm/openjdk-25 --strip-components=1 \
+    && rm /tmp/openjdk25.tar.gz
 
-ENV JAVA_HOME=/usr/lib/jvm/openjdk-21
+ENV JAVA_HOME=/usr/lib/jvm/openjdk-25
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
-# Install signal-cli v0.14.8 (matches restored config format version 11)
+# Install signal-cli v0.14.8 (matches restored config version 11)
 ENV SIGNAL_CLI_VERSION=0.14.8
 RUN curl -fsSL -o /tmp/signal-cli.tar.gz https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}.tar.gz \
     && tar -xzf /tmp/signal-cli.tar.gz -C /opt/ \
