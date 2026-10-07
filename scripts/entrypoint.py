@@ -3,12 +3,16 @@ import os
 import sys
 import time
 import shutil
+import socket
 import glob
 import tarfile
 import subprocess
 import threading
-import urllib.request
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+# Unbuffer stdout and stderr for immediate logging in Render
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 HERMES_DIR = "/root/.hermes"
 SIGNAL_DIR = "/root/.local/share/signal-cli"
@@ -117,17 +121,15 @@ def wait_for_signal_daemon():
     print(f"[+] Starting signal-cli daemon for account {SIGNAL_ACCOUNT}...", flush=True)
     subprocess.Popen(["signal-cli", "--account", SIGNAL_ACCOUNT, "daemon", "--http", "127.0.0.1:8080"])
     
-    print("[*] Polling http://127.0.0.1:8080/v1/about until signal-cli is fully ready...", flush=True)
-    for _ in range(45):
+    print("[*] Polling 127.0.0.1:8080 TCP socket until ready...", flush=True)
+    for _ in range(30):
         try:
-            req = urllib.request.Request("http://127.0.0.1:8080/v1/about")
-            with urllib.request.urlopen(req, timeout=2) as resp:
-                if resp.status == 200:
-                    print("[+] signal-cli daemon HTTP API is ready (200 OK)!", flush=True)
-                    return
+            with socket.create_connection(("127.0.0.1", 8080), timeout=1):
+                print("[+] signal-cli daemon TCP socket connected on port 8080!", flush=True)
+                return
         except Exception:
-            time.sleep(1)
-    print("[!] Warning: signal-cli daemon HTTP check timed out. Proceeding...", flush=True)
+            time.sleep(0.5)
+    print("[!] Warning: signal-cli daemon socket check timed out.", flush=True)
 
 def sync_to_github():
     if not GITHUB_TOKEN or not GITHUB_USER:
@@ -158,9 +160,9 @@ def periodic_sync_loop():
         sync_to_github()
 
 def main():
-    # 1. Start Render health check server FIRST so port 10000 opens instantly
+    # 1. Bind health check server immediately
     threading.Thread(target=start_health_server, daemon=True).start()
-    time.sleep(1)
+    time.sleep(0.5)
 
     run_cmd('git config --global user.name "Bodhi Assistant"')
     run_cmd('git config --global user.email "bodhi@render.local"')
@@ -171,10 +173,10 @@ def main():
 
     threading.Thread(target=periodic_sync_loop, daemon=True).start()
 
-    # 2. Start signal-cli and block execution until 127.0.0.1:8080 returns 200 OK
+    # 2. Wait for signal-cli port 8080 TCP socket
     wait_for_signal_daemon()
 
-    # 3. Launch Hermes Gateway only after signal-cli is active
+    # 3. Launch Hermes Gateway
     print("[+] Launching Hermes Agent Gateway...", flush=True)
     os.execvp("hermes", ["hermes", "gateway"])
 
