@@ -8,6 +8,7 @@ import glob
 import tarfile
 import subprocess
 import threading
+import traceback
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -42,10 +43,13 @@ def bind_health_server_instantly():
             self.wfile.write(b"Bodhi Gateway Healthy")
         def log_message(self, format, *args):
             return
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    t = threading.Thread(target=server.serve_forever, daemon=True)
-    t.start()
-    print(f"[+] Render health check HTTP server listening on 0.0.0.0:{port}", flush=True)
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthHandler)
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        print(f"[+] Render health check HTTP server listening on 0.0.0.0:{port}", flush=True)
+    except Exception as e:
+        print(f"[!] Health server bind error: {e}", flush=True)
 
 def run_cmd(cmd, check=False):
     return subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)
@@ -58,19 +62,22 @@ def restore_state():
     if os.path.exists(BACKUP_DIR):
         run_cmd(f"rm -rf {BACKUP_DIR}")
         
-    repo_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_USER}/{BACKUP_REPO}.git"
-    res = run_cmd(f"git clone --depth 1 {repo_url} {BACKUP_DIR}")
-    
-    archive = os.path.join(BACKUP_DIR, "latest.tar.gz")
-    if res.returncode == 0 and os.path.exists(archive):
-        try:
-            with tarfile.open(archive, "r:gz") as tar:
-                tar.extractall(path="/root")
-            print("[+] Memory and Signal session successfully restored.", flush=True)
-        except Exception as e:
-            print(f"[!] Tarball restore note: {e}", flush=True)
+    if GITHUB_TOKEN and GITHUB_USER:
+        repo_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_USER}/{BACKUP_REPO}.git"
+        res = run_cmd(f"git clone --depth 1 {repo_url} {BACKUP_DIR}")
+        
+        archive = os.path.join(BACKUP_DIR, "latest.tar.gz")
+        if res.returncode == 0 and os.path.exists(archive):
+            try:
+                with tarfile.open(archive, "r:gz") as tar:
+                    tar.extractall(path="/root")
+                print("[+] Memory and Signal session successfully restored.", flush=True)
+            except Exception as e:
+                print(f"[!] Tarball restore note: {e}", flush=True)
+        else:
+            print("[!] No backup repository found or clone failed. Initializing clean slate.", flush=True)
     else:
-        print("[!] No backup repository found. Initializing clean slate.", flush=True)
+        print("[!] GITHUB_TOKEN or GITHUB_USER missing. Skipping state restoration.", flush=True)
 
 def configure_hermes():
     print("[*] Writing Hermes configuration and profile files...", flush=True)
@@ -129,6 +136,7 @@ def purge_stale_sessions():
 
 def wait_for_signal_daemon():
     if not SIGNAL_ACCOUNT:
+        print("[!] SIGNAL_ACCOUNT environment variable not set. Skipping signal-cli daemon.", flush=True)
         return
 
     run_cmd("pkill -9 -f signal-cli || true")
@@ -146,4 +154,71 @@ def wait_for_signal_daemon():
         except Exception:
             if elapsed % 5 == 0:
                 print(f"[*] Waiting for signal-cli port 8080 ({elapsed}s elapsed)...", flush=True)
-            time.sleep
+            time.sleep(1)
+    print("[!] Warning: signal-cli daemon socket check timed out after 90 seconds.", flush=True)
+
+def sync_to_github():
+    if not GITHUB_TOKEN or not GITHUB_USER:
+        return
+    print("[*] Syncing Bodhi state snapshot to GitHub...", flush=True)
+    repo_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_USER}/{BACKUP_REPO}.git"
+    archive = os.path.join(BACKUP_DIR, "latest.tar.gz")
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    
+    try:
+        with tarfile.open(archive, "w:gz") as tar:
+            if os.path.exists(HERMES_DIR):
+                tar.add(HERMES_DIR, arcname=".hermes")
+            if os.path.exists(SIGNAL_DIR):
+                tar.add(SIGNAL_DIR, arcname=".local/share/signal-cli")
+                
+        run_cmd(f"cd {BACKUP_DIR} && git init -b main && git remote add origin {repo_url} || true")
+        run_cmd(f"cd {BACKUP_DIR} && git add latest.tar.gz")
+        run_cmd(f'cd {BACKUP_DIR} && git commit -m "Auto-sync Bodhi state [{time.strftime("%Y-%m-%dT%H:%M:%SZ")}]"')
+        run_cmd(f"cd {BACKUP_DIR} && git push -u origin main --force")
+        print("[+] State push complete.", flush=True)
+    except Exception as e:
+        print(f"[!] State sync error: {e}", flush=True)
+
+def periodic_sync_loop():
+    while True:
+        time.sleep(180)
+        sync_to_github()
+
+def run_hermes_supervisor():
+    print("[+] Launching Hermes Agent Gateway under supervisor loop...", flush=True)
+    while True:
+        try:
+            proc = subprocess.run(["hermes", "gateway"])
+            print(f"[!] Hermes Gateway process exited with code {proc.returncode}. Restarting in 5s...", flush=True)
+        except Exception as e:
+            print(f"[!] Exception launching hermes gateway: {e}. Retrying in 10s...", flush=True)
+            time.sleep(10)
+        time.sleep(5)
+
+def main():
+    bind_health_server_instantly()
+
+    try:
+        run_cmd('git config --global user.name "Bodhi Assistant"')
+        run_cmd('git config --global user.email "bodhi@render.local"')
+
+        restore_state()
+        configure_hermes()
+        purge_stale_sessions()
+
+        threading.Thread(target=periodic_sync_loop, daemon=True).start()
+
+        wait_for_signal_daemon()
+
+        run_hermes_supervisor()
+
+    except Exception as e:
+        print(f"[FATAL] Uncaught error in entrypoint.py: {e}", flush=True)
+        traceback.print_exc()
+        print("[!] Keeping health server running for inspection...", flush=True)
+        while True:
+            time.sleep(60)
+
+if __name__ == "__main__":
+    main()
