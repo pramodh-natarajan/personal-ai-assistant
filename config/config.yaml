@@ -26,12 +26,14 @@ models:
 memory:
   memory_enabled: true
   user_profile_enabled: true
-  memory_char_limit: 2000
-  user_char_limit: 1500
+  memory_char_limit: 3000
+  user_char_limit: 2000
   write_approval: false
 
 curator:
-  enabled: false
+  enabled: true
+  interval_hours: 168
+  consolidate: true
 
 gateway:
   signal:

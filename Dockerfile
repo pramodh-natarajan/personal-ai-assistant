@@ -1,26 +1,24 @@
-FROM python:3.11-slim
+FROM openjdk:21-slim-bookworm
 
-ENV DEBIAN_FRONTEND=noninteractive
-ARG SIGNAL_CLI_VERSION=0.14.8
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git build-essential ca-certificates \
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    tar \
+    python3 \
+    python3-pip \
+    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install standalone GraalVM native release of signal-cli v0.14.8
-RUN curl -fL -o /tmp/signal-cli-native.tar.gz "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux-native.tar.gz" \
-    && tar xf /tmp/signal-cli-native.tar.gz -C /opt \
-    && ln -sf $(find /opt -name signal-cli -type f | head -n 1) /usr/local/bin/signal-cli \
-    && rm /tmp/signal-cli-native.tar.gz
-
-# Install Hermes Agent Framework
-RUN pip install --no-cache-dir hermes-agent
+ENV SIGNAL_CLI_VERSION=0.14.8
+RUN curl -L -o /tmp/signal-cli.tar.gz https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-Linux.tar.gz \
+    && tar -xzf /tmp/signal-cli.tar.gz -C /opt/ \
+    && ln -s /opt/signal-cli-${SIGNAL_CLI_VERSION}/bin/signal-cli /usr/local/bin/signal-cli \
+    && rm /tmp/signal-cli.tar.gz
 
 WORKDIR /app
-COPY . .
+COPY . /app
 
-RUN chmod +x /app/scripts/entrypoint.sh
+RUN pip3 install --no-cache-dir -r requirements.txt
+RUN chmod +x /app/scripts/entrypoint.py
 
-EXPOSE 10000
-ENTRYPOINT ["/app/scripts/entrypoint.sh"]
+ENTRYPOINT ["python3", "/app/scripts/entrypoint.py"]
