@@ -1,5 +1,7 @@
 # Bodhi
 
+> This is a vibe coded personal project.
+
 Persistent Hermes Agent on Render, with Signal as the chat interface and Google AI Studio (`gemini-3.8-flash` / `gemini-3.5-flash-lite`) as the primary inference backend.
 
 Bodhi restores memory and Signal session state from a private GitHub backup on boot, runs `signal-cli` as an HTTP daemon, and supervises `hermes gateway`. Snapshots are pushed back to GitHub every 4 hours.
